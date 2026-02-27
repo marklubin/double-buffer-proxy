@@ -45,23 +45,8 @@ detect_os() {
 detect_runtime() {
     if command -v podman >/dev/null 2>&1; then
         RUNTIME="podman"
-        COMPOSE_CMD="podman compose"
-        # Verify podman compose is available
-        if ! podman compose version >/dev/null 2>&1; then
-            if command -v podman-compose >/dev/null 2>&1; then
-                COMPOSE_CMD="podman-compose"
-            else
-                warn "podman found but podman-compose not available. Using podman directly."
-                COMPOSE_CMD=""
-            fi
-        fi
     elif command -v docker >/dev/null 2>&1; then
         RUNTIME="docker"
-        COMPOSE_CMD="docker compose"
-        # Check docker daemon is running
-        if ! docker info >/dev/null 2>&1; then
-            error "Docker is installed but the daemon is not running. Start it with: sudo systemctl start docker"
-        fi
     else
         printf '\n'
         error "Neither Docker nor Podman found. Please install one first:
@@ -73,7 +58,17 @@ detect_runtime() {
   On Debian:  sudo apt install podman
   On Fedora:  sudo dnf install podman"
     fi
-    log "Container runtime: $RUNTIME"
+
+    # Test if runtime works rootless; fall back to sudo
+    if $RUNTIME info >/dev/null 2>&1; then
+        RT_CMD="$RUNTIME"
+    elif sudo $RUNTIME info >/dev/null 2>&1; then
+        RT_CMD="sudo $RUNTIME"
+        log "$RUNTIME requires sudo."
+    else
+        error "$RUNTIME is installed but not functional. Check: $RUNTIME info"
+    fi
+    log "Container runtime: $RT_CMD"
 }
 
 # ── Check prerequisites ─────────────────────────────────────────────────────
@@ -104,7 +99,7 @@ get_image() {
 
     # Try pulling from registry first
     log "Pulling container image..."
-    if $RUNTIME pull "$FULL_IMAGE" 2>/dev/null; then
+    if $RT_CMD pull "$FULL_IMAGE" 2>/dev/null; then
         ok "Image pulled: $FULL_IMAGE"
         IMAGE_REF="$FULL_IMAGE"
         return
@@ -122,7 +117,15 @@ get_image() {
         mv "$TMPDIR_BUILD"/double-buffer-proxy-main "$TMPDIR_BUILD/repo"
     fi
 
-    $RUNTIME build -t "${IMAGE_NAME}:latest" "$TMPDIR_BUILD/repo"
+    if $RT_CMD build -t "${IMAGE_NAME}:latest" "$TMPDIR_BUILD/repo"; then
+        :
+    elif [ "$RT_CMD" = "$RUNTIME" ] && sudo $RUNTIME build -t "${IMAGE_NAME}:latest" "$TMPDIR_BUILD/repo"; then
+        # Rootless build failed (common with podman + cgroupv2) — sudo worked
+        RT_CMD="sudo $RUNTIME"
+        log "Rootless build failed — using sudo for $RUNTIME."
+    else
+        error "Failed to build container image."
+    fi
     IMAGE_REF="${IMAGE_NAME}:latest"
     ok "Image built: $IMAGE_REF"
 }
@@ -135,7 +138,7 @@ generate_certs() {
     fi
 
     log "Generating TLS certificates..."
-    $RUNTIME run --rm \
+    $RT_CMD run --rm \
         --entrypoint python \
         -v "$DATA_DIR/certs:/app/certs" \
         "$IMAGE_REF" \
@@ -161,12 +164,19 @@ DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
 LOG_LEVEL="${DBPROXY_LOG_LEVEL:-INFO}"
 
 # ── Detect container runtime ────────────────────────────────────────────
-if command -v podman >/dev/null 2>&1; then
-    RT="podman"
-elif command -v docker >/dev/null 2>&1; then
-    RT="docker"
-else
-    echo "ERROR: Neither docker nor podman found." >&2
+RT=""
+for _rt in podman docker; do
+    if command -v "$_rt" >/dev/null 2>&1; then
+        if "$_rt" info >/dev/null 2>&1; then
+            RT="$_rt"
+        elif sudo "$_rt" info >/dev/null 2>&1; then
+            RT="sudo $_rt"
+        fi
+        break
+    fi
+done
+if [ -z "$RT" ]; then
+    echo "ERROR: Neither docker nor podman found (or not functional)." >&2
     exit 1
 fi
 
@@ -398,9 +408,9 @@ smoke_test() {
     log "Starting proxy container..."
 
     # Clean up any existing container
-    $RUNTIME rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    $RT_CMD rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-    $RUNTIME run -d \
+    $RT_CMD run -d \
         --name "$CONTAINER_NAME" \
         -p "127.0.0.1:${PROXY_PORT}:8080" \
         -p "127.0.0.1:${DASHBOARD_PORT}:443" \
@@ -430,7 +440,7 @@ smoke_test() {
     else
         printf "\n"
         warn "Proxy started but health check failed. Check logs:"
-        printf '  %s logs %s\n' "$RUNTIME" "$CONTAINER_NAME"
+        printf '  %s logs %s\n' "$RT_CMD" "$CONTAINER_NAME"
     fi
 }
 
