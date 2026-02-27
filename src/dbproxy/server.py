@@ -275,7 +275,10 @@ async def _passthrough_to_upstream(
         # Filter out hop-by-hop headers from upstream response
         safe_headers = {
             k: v for k, v in resp.headers.items()
-            if k.lower() not in ("transfer-encoding", "connection", "keep-alive")
+            if k.lower() not in (
+                "transfer-encoding", "connection", "keep-alive",
+                "content-encoding", "content-length",
+            )
         }
         return web.Response(
             body=resp.content,
