@@ -28,7 +28,7 @@ Double-buffer context window management for Claude Code. Transparently extends C
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/anthropics/double-buffer-proxy/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
 ```
 
 The installer:
@@ -247,7 +247,7 @@ DBPROXY_CHECKPOINT_THRESHOLD=0.50 DBPROXY_SWAP_THRESHOLD=0.70 claude-db-proxy
 
 ```sh
 # Clone and install dev dependencies
-git clone https://github.com/anthropics/double-buffer-proxy
+git clone https://github.com/marklubin/double-buffer-proxy
 cd double-buffer-proxy
 uv sync --dev
 

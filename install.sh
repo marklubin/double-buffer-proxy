@@ -1,14 +1,14 @@
 #!/usr/bin/env sh
 # Claude DB Proxy — Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/anthropics/double-buffer-proxy/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
 #
 # Installs the double-buffer context window proxy for Claude Code.
 # Supports Docker and Podman. Installs to ~/.local/ (XDG-compliant).
 set -eu
 
 # ── Configuration ────────────────────────────────────────────────────────────
-REPO_URL="https://github.com/anthropics/double-buffer-proxy"
-IMAGE_REGISTRY="ghcr.io/anthropics"
+REPO_URL="https://github.com/marklubin/double-buffer-proxy"
+IMAGE_REGISTRY="ghcr.io/marklubin"
 IMAGE_NAME="claude-db-proxy"
 CONTAINER_NAME="claude-db-proxy"
 
@@ -150,7 +150,7 @@ install_wrapper() {
     cat > "$WRAPPER" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
 # claude-db-proxy — Launch Claude Code through the double-buffer proxy.
-# https://github.com/anthropics/double-buffer-proxy
+# https://github.com/marklubin/double-buffer-proxy
 set -euo pipefail
 
 DATA_DIR="${DBPROXY_DATA_DIR:-$HOME/.local/share/claude-db-proxy}"
@@ -243,7 +243,7 @@ esac
 
 # ── Resolve image ───────────────────────────────────────────────────────
 IMAGE_REF=""
-for candidate in "ghcr.io/anthropics/claude-db-proxy:latest" "claude-db-proxy:latest"; do
+for candidate in "ghcr.io/marklubin/claude-db-proxy:latest" "claude-db-proxy:latest"; do
     if $RT image exists "$candidate" 2>/dev/null || $RT inspect "$candidate" >/dev/null 2>&1; then
         IMAGE_REF="$candidate"
         break
@@ -251,7 +251,7 @@ for candidate in "ghcr.io/anthropics/claude-db-proxy:latest" "claude-db-proxy:la
 done
 if [ -z "$IMAGE_REF" ]; then
     echo "Image not found locally. Pulling..." >&2
-    IMAGE_REF="ghcr.io/anthropics/claude-db-proxy:latest"
+    IMAGE_REF="ghcr.io/marklubin/claude-db-proxy:latest"
     $RT pull "$IMAGE_REF"
 fi
 
