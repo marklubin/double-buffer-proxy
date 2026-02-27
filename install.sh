@@ -389,6 +389,51 @@ detect_shell_config() {
     esac
 }
 
+# ── Smoke test — start container and verify health ───────────────────────────
+smoke_test() {
+    PROXY_PORT="${DBPROXY_PROXY_PORT:-8080}"
+    DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
+    LOG_LEVEL="${DBPROXY_LOG_LEVEL:-INFO}"
+
+    log "Starting proxy container..."
+
+    # Clean up any existing container
+    $RUNTIME rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+    $RUNTIME run -d \
+        --name "$CONTAINER_NAME" \
+        -p "127.0.0.1:${PROXY_PORT}:8080" \
+        -p "127.0.0.1:${DASHBOARD_PORT}:443" \
+        -v "$DATA_DIR/certs:/app/certs" \
+        -v "$DATA_DIR/data:/app/data" \
+        -v "$DATA_DIR/logs:/app/logs" \
+        -e "DBPROXY_HOST=0.0.0.0" \
+        -e "DBPROXY_LOG_LEVEL=${LOG_LEVEL}" \
+        --restart unless-stopped \
+        "$IMAGE_REF" >/dev/null
+
+    printf "  Waiting for health check"
+    HEALTHY=false
+    for _i in $(seq 1 30); do
+        if curl -fsk "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+            HEALTHY=true
+            break
+        fi
+        printf "."
+        sleep 1
+    done
+
+    if $HEALTHY; then
+        printf "\n"
+        ok "Proxy is running and healthy."
+        printf '  Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
+    else
+        printf "\n"
+        warn "Proxy started but health check failed. Check logs:"
+        printf '  %s logs %s\n' "$RUNTIME" "$CONTAINER_NAME"
+    fi
+}
+
 # ── Print next steps ─────────────────────────────────────────────────────────
 print_next_steps() {
     detect_shell_config
@@ -442,6 +487,7 @@ main() {
     generate_certs
     install_wrapper
     configure_statusline
+    smoke_test
     print_next_steps
 }
 
