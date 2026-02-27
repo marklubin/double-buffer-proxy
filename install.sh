@@ -136,9 +136,10 @@ generate_certs() {
 
     log "Generating TLS certificates..."
     $RUNTIME run --rm \
+        --entrypoint python \
         -v "$DATA_DIR/certs:/app/certs" \
         "$IMAGE_REF" \
-        python -c "from dbproxy.tls import generate_certs; generate_certs('/app/certs'); print('OK')"
+        -c "from dbproxy.tls import generate_certs; generate_certs('/app/certs'); print('OK')"
     ok "Certificates generated at $DATA_DIR/certs/"
 }
 
