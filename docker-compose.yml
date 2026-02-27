@@ -1,0 +1,16 @@
+services:
+  dbproxy:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"   # CONNECT redirector (localhost only)
+      - "8443:443"               # Dashboard + proxy (browser access)
+    volumes:
+      - ./certs:/app/certs       # TLS certs (shared with host for NODE_EXTRA_CA_CERTS)
+      - ./data:/app/data         # SQLite persistence
+      - ./logs:/app/logs         # Log files
+    environment:
+      - DBPROXY_HOST=0.0.0.0
+      - DBPROXY_LOG_LEVEL=${DBPROXY_LOG_LEVEL:-INFO}
+      - DBPROXY_CHECKPOINT_THRESHOLD=${DBPROXY_CHECKPOINT_THRESHOLD:-}
+      - DBPROXY_SWAP_THRESHOLD=${DBPROXY_SWAP_THRESHOLD:-}
+    restart: unless-stopped

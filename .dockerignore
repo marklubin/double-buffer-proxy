@@ -1,0 +1,11 @@
+.git
+__pycache__
+*.pyc
+data/
+logs/
+certs/
+tests/
+.pytest_cache
+.venv
+*.egg-info
+hopping-context-windows.pdf

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Launch Claude Code through the double-buffer proxy (development version).
+# For the installed version, use: claude-db-proxy
+#
+# This script uses docker-compose from the repo directory.
+# For production use, install via: curl -fsSL .../install.sh | sh
+set -euo pipefail
+
+COMPOSE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CA_CERT="$COMPOSE_DIR/certs/ca.pem"
+DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
+PROXY_PORT="${DBPROXY_PROXY_PORT:-8080}"
+
+# Detect container runtime
+if command -v podman >/dev/null 2>&1; then
+    COMPOSE="podman compose"
+elif command -v docker >/dev/null 2>&1; then
+    COMPOSE="docker compose"
+else
+    echo "ERROR: Neither docker nor podman found." >&2
+    exit 1
+fi
+
+# Ensure container is running
+if ! $COMPOSE -f "$COMPOSE_DIR/docker-compose.yml" ps --status running 2>/dev/null | grep -q dbproxy; then
+    echo "Starting double-buffer-proxy container..."
+    $COMPOSE -f "$COMPOSE_DIR/docker-compose.yml" up -d --build
+
+    printf "Waiting for proxy to be healthy"
+    for _i in $(seq 1 30); do
+        if curl -fsk "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+            printf " ready.\n"
+            break
+        fi
+        printf "."
+        sleep 1
+    done
+fi
+
+# Verify CA cert
+if [ ! -f "$CA_CERT" ]; then
+    echo "ERROR: CA certificate not found at $CA_CERT" >&2
+    echo "Check: $COMPOSE -f $COMPOSE_DIR/docker-compose.yml logs" >&2
+    exit 1
+fi
+
+# Launch Claude
+printf '\033[0;36mDB Proxy: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
+export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
+export NODE_EXTRA_CA_CERTS="$CA_CERT"
+export DBPROXY_ACTIVE=1
+exec claude "$@"

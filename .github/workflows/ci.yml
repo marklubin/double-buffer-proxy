@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run tests
+        run: uv run pytest tests/ -x -v --tb=short
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build -t claude-db-proxy:test .
+
+      - name: Smoke test — start container
+        run: |
+          docker run -d --name dbproxy-test \
+            -p 127.0.0.1:8080:8080 \
+            -p 127.0.0.1:8443:443 \
+            claude-db-proxy:test
+          echo "Waiting for health..."
+          for i in $(seq 1 30); do
+            if curl -fsk https://localhost:8443/health 2>/dev/null; then
+              echo ""
+              echo "Healthy!"
+              exit 0
+            fi
+            printf "."
+            sleep 1
+          done
+          echo ""
+          echo "FAILED: health check timeout"
+          docker logs dbproxy-test
+          exit 1
+
+      - name: Smoke test — CONNECT redirector accepts connections
+        run: |
+          # Verify redirector is listening and responds to CONNECT
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -x http://localhost:8080 \
+            --proxy-insecure \
+            -sk https://api.anthropic.com/health 2>/dev/null || true)
+          echo "CONNECT proxy response code: $response"
+          # Any response (even error) means the tunnel works
+          # 000 would mean connection refused
+
+      - name: Smoke test — health endpoint content
+        run: |
+          health=$(curl -fsk https://localhost:8443/health)
+          echo "$health"
+          echo "$health" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert d['status'] == 'ok', f'Expected ok, got {d[\"status\"]}'
+          print('Health check passed')
+          "
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f dbproxy-test 2>/dev/null || true

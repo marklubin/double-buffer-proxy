@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  schedule:
+    # Check for new Claude Code versions daily at 06:00 UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      claude_version:
+        description: "Claude Code version to release for (e.g. 2.1.61). Leave empty to auto-detect."
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/claude-db-proxy
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      claude_version: ${{ steps.detect.outputs.version }}
+      needs_release: ${{ steps.detect.outputs.needs_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need tags
+
+      - name: Detect latest Claude Code version
+        id: detect
+        run: |
+          if [ -n "${{ inputs.claude_version }}" ]; then
+            VERSION="${{ inputs.claude_version }}"
+            echo "Using manual version: $VERSION"
+          else
+            VERSION=$(npm view @anthropic-ai/claude-code version 2>/dev/null || echo "")
+            if [ -z "$VERSION" ]; then
+              echo "Failed to detect Claude Code version from npm"
+              echo "needs_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Latest Claude Code version: $VERSION"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Check if we already have a tag for this version
+          if git tag -l "v$VERSION" | grep -q "v$VERSION"; then
+            echo "Tag v$VERSION already exists. No release needed."
+            echo "needs_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version detected: $VERSION"
+            echo "needs_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    needs: check-version
+    if: needs.check-version.outputs.needs_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Run tests
+        run: |
+          uv sync --dev
+          uv run pytest tests/ -x -v --tb=short
+
+  build-and-push:
+    needs: [check-version, test]
+    if: needs.check-version.outputs.needs_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.claude_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          echo "Updated version to $VERSION"
+          cat pyproject.toml | head -5
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            ${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.title=Claude DB Proxy
+            org.opencontainers.image.description=Double-buffer context window proxy for Claude Code
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            com.anthropic.claude-code-version=${{ env.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test built image
+        run: |
+          docker run -d --name smoke-test \
+            -p 127.0.0.1:8080:8080 \
+            -p 127.0.0.1:8443:443 \
+            ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          echo "Waiting for health..."
+          for i in $(seq 1 30); do
+            if curl -fsk https://localhost:8443/health 2>/dev/null; then
+              echo " Healthy!"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsk https://localhost:8443/health
+          docker rm -f smoke-test
+
+  release:
+    needs: [check-version, build-and-push]
+    if: needs.check-version.outputs.needs_release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.check-version.outputs.claude_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update version and commit
+        run: |
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "release: v$VERSION (Claude Code $VERSION)" || echo "No changes to commit"
+          git tag -a "v$VERSION" -m "Release v$VERSION — matches Claude Code $VERSION"
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          body: |
+            ## Claude DB Proxy v${{ env.VERSION }}
+
+            Tested and verified with **Claude Code v${{ env.VERSION }}**.
+
+            ### Install
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sh
+            ```
+
+            ### Container Image
+
+            ```sh
+            docker pull ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            ```
+
+            ### What's included
+            - Double-buffer context window management
+            - CONNECT redirector for transparent HTTPS_PROXY integration
+            - Web dashboard for monitoring conversations
+            - Structured JSON logging
+          generate_release_notes: true

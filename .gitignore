@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# Runtime data (generated, not checked in)
+data/
+logs/
+certs/
+
+# Large files
+*.pdf
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

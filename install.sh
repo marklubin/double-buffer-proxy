@@ -1,0 +1,447 @@
+#!/usr/bin/env sh
+# Claude DB Proxy — Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/anthropics/double-buffer-proxy/main/install.sh | sh
+#
+# Installs the double-buffer context window proxy for Claude Code.
+# Supports Docker and Podman. Installs to ~/.local/ (XDG-compliant).
+set -eu
+
+# ── Configuration ────────────────────────────────────────────────────────────
+REPO_URL="https://github.com/anthropics/double-buffer-proxy"
+IMAGE_REGISTRY="ghcr.io/anthropics"
+IMAGE_NAME="claude-db-proxy"
+CONTAINER_NAME="claude-db-proxy"
+
+INSTALL_DIR="${HOME}/.local/bin"
+DATA_DIR="${HOME}/.local/share/claude-db-proxy"
+CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+log()   { printf '\033[1;34m==> %s\033[0m\n' "$*"; }
+warn()  { printf '\033[1;33m==> WARNING: %s\033[0m\n' "$*"; }
+error() { printf '\033[1;31m==> ERROR: %s\033[0m\n' "$*"; exit 1; }
+ok()    { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
+
+# ── Banner ───────────────────────────────────────────────────────────────────
+banner() {
+    printf '\n'
+    printf '\033[1m  Claude DB Proxy — Installer\033[0m\n'
+    printf '  Double-buffer context window management for Claude Code\n'
+    printf '\n'
+}
+
+# ── Detect OS ────────────────────────────────────────────────────────────────
+detect_os() {
+    OS="$(uname -s)"
+    case "$OS" in
+        Linux)  OS="linux" ;;
+        Darwin) OS="darwin" ;;
+        *)      error "Unsupported OS: $OS. Only Linux and macOS are supported." ;;
+    esac
+    log "Detected OS: $OS"
+}
+
+# ── Detect container runtime ────────────────────────────────────────────────
+detect_runtime() {
+    if command -v podman >/dev/null 2>&1; then
+        RUNTIME="podman"
+        COMPOSE_CMD="podman compose"
+        # Verify podman compose is available
+        if ! podman compose version >/dev/null 2>&1; then
+            if command -v podman-compose >/dev/null 2>&1; then
+                COMPOSE_CMD="podman-compose"
+            else
+                warn "podman found but podman-compose not available. Using podman directly."
+                COMPOSE_CMD=""
+            fi
+        fi
+    elif command -v docker >/dev/null 2>&1; then
+        RUNTIME="docker"
+        COMPOSE_CMD="docker compose"
+        # Check docker daemon is running
+        if ! docker info >/dev/null 2>&1; then
+            error "Docker is installed but the daemon is not running. Start it with: sudo systemctl start docker"
+        fi
+    else
+        printf '\n'
+        error "Neither Docker nor Podman found. Please install one first:
+
+  Docker:  https://docs.docker.com/get-docker/
+  Podman:  https://podman.io/getting-started/installation
+
+  On macOS:   brew install podman
+  On Debian:  sudo apt install podman
+  On Fedora:  sudo dnf install podman"
+    fi
+    log "Container runtime: $RUNTIME"
+}
+
+# ── Check prerequisites ─────────────────────────────────────────────────────
+check_prereqs() {
+    for cmd in curl; do
+        command -v "$cmd" >/dev/null 2>&1 || error "'$cmd' is required but not found."
+    done
+
+    # Ensure claude CLI is installed
+    if ! command -v claude >/dev/null 2>&1; then
+        warn "'claude' CLI not found on PATH. Install it first: npm install -g @anthropic-ai/claude-code"
+    fi
+}
+
+# ── Create directories ──────────────────────────────────────────────────────
+setup_dirs() {
+    log "Creating directories..."
+    mkdir -p "$INSTALL_DIR"
+    mkdir -p "$DATA_DIR/certs"
+    mkdir -p "$DATA_DIR/data"
+    mkdir -p "$DATA_DIR/logs"
+    mkdir -p "$(dirname "$CLAUDE_SETTINGS")"
+}
+
+# ── Pull or build image ─────────────────────────────────────────────────────
+get_image() {
+    FULL_IMAGE="${IMAGE_REGISTRY}/${IMAGE_NAME}:latest"
+
+    # Try pulling from registry first
+    log "Pulling container image..."
+    if $RUNTIME pull "$FULL_IMAGE" 2>/dev/null; then
+        ok "Image pulled: $FULL_IMAGE"
+        IMAGE_REF="$FULL_IMAGE"
+        return
+    fi
+
+    # Fall back to building from source
+    log "Registry image not available. Building from source..."
+    TMPDIR_BUILD="$(mktemp -d)"
+    trap 'rm -rf "$TMPDIR_BUILD"' EXIT
+
+    if command -v git >/dev/null 2>&1; then
+        git clone --depth 1 "$REPO_URL" "$TMPDIR_BUILD/repo"
+    else
+        curl -fsSL "${REPO_URL}/archive/refs/heads/main.tar.gz" | tar xz -C "$TMPDIR_BUILD"
+        mv "$TMPDIR_BUILD"/double-buffer-proxy-main "$TMPDIR_BUILD/repo"
+    fi
+
+    $RUNTIME build -t "${IMAGE_NAME}:latest" "$TMPDIR_BUILD/repo"
+    IMAGE_REF="${IMAGE_NAME}:latest"
+    ok "Image built: $IMAGE_REF"
+}
+
+# ── Generate TLS certs ──────────────────────────────────────────────────────
+generate_certs() {
+    if [ -f "$DATA_DIR/certs/ca.pem" ]; then
+        log "TLS certificates already exist."
+        return
+    fi
+
+    log "Generating TLS certificates..."
+    $RUNTIME run --rm \
+        -v "$DATA_DIR/certs:/app/certs" \
+        "$IMAGE_REF" \
+        python -c "from dbproxy.tls import generate_certs; generate_certs('/app/certs'); print('OK')"
+    ok "Certificates generated at $DATA_DIR/certs/"
+}
+
+# ── Install wrapper script ──────────────────────────────────────────────────
+install_wrapper() {
+    WRAPPER="$INSTALL_DIR/claude-db-proxy"
+    log "Installing claude-db-proxy to $WRAPPER..."
+
+    cat > "$WRAPPER" << 'WRAPPER_EOF'
+#!/usr/bin/env bash
+# claude-db-proxy — Launch Claude Code through the double-buffer proxy.
+# https://github.com/anthropics/double-buffer-proxy
+set -euo pipefail
+
+DATA_DIR="${DBPROXY_DATA_DIR:-$HOME/.local/share/claude-db-proxy}"
+CONTAINER_NAME="claude-db-proxy"
+PROXY_PORT="${DBPROXY_PROXY_PORT:-8080}"
+DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
+LOG_LEVEL="${DBPROXY_LOG_LEVEL:-INFO}"
+
+# ── Detect container runtime ────────────────────────────────────────────
+if command -v podman >/dev/null 2>&1; then
+    RT="podman"
+elif command -v docker >/dev/null 2>&1; then
+    RT="docker"
+else
+    echo "ERROR: Neither docker nor podman found." >&2
+    exit 1
+fi
+
+# ── Subcommands ─────────────────────────────────────────────────────────
+case "${1:-}" in
+    start)
+        shift
+        ;; # fall through to start logic below
+    stop)
+        echo "Stopping $CONTAINER_NAME..."
+        $RT stop "$CONTAINER_NAME" 2>/dev/null || true
+        $RT rm "$CONTAINER_NAME" 2>/dev/null || true
+        echo "Stopped."
+        exit 0
+        ;;
+    status)
+        if $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | grep -q "$CONTAINER_NAME"; then
+            echo "Running"
+            curl -fsk "https://localhost:${DASHBOARD_PORT}/health" 2>/dev/null || echo "(health check failed)"
+        else
+            echo "Stopped"
+        fi
+        exit 0
+        ;;
+    logs)
+        shift
+        if [ -d "$DATA_DIR/logs" ]; then
+            tail -f "${@:--n 50}" "$DATA_DIR/logs/dbproxy.jsonl" 2>/dev/null || echo "No log file yet."
+        else
+            echo "No logs directory found."
+        fi
+        exit 0
+        ;;
+    dashboard)
+        echo "https://localhost:${DASHBOARD_PORT}/dashboard"
+        exit 0
+        ;;
+    uninstall)
+        echo "Stopping container..."
+        $RT stop "$CONTAINER_NAME" 2>/dev/null || true
+        $RT rm "$CONTAINER_NAME" 2>/dev/null || true
+        echo ""
+        echo "To complete uninstall, remove:"
+        echo "  rm $0"
+        echo "  rm -rf $DATA_DIR"
+        echo "  # Remove 'alias claude=claude-db-proxy' from your shell config"
+        echo "  # Remove statusLine from ~/.claude/settings.json"
+        exit 0
+        ;;
+    help|--help|-h)
+        echo "Usage: claude-db-proxy [command] [claude args...]"
+        echo ""
+        echo "Commands:"
+        echo "  (default)    Start proxy (if needed) and launch Claude Code"
+        echo "  start        Start the proxy container only"
+        echo "  stop         Stop the proxy container"
+        echo "  status       Show proxy status"
+        echo "  logs         Tail proxy logs (structured JSON)"
+        echo "  dashboard    Print dashboard URL"
+        echo "  uninstall    Stop container and print cleanup instructions"
+        echo "  help         Show this help"
+        echo ""
+        echo "Environment:"
+        echo "  DBPROXY_LOG_LEVEL          Log level (default: INFO)"
+        echo "  DBPROXY_PROXY_PORT         Redirector port (default: 8080)"
+        echo "  DBPROXY_DASHBOARD_PORT     Dashboard port (default: 8443)"
+        echo "  DBPROXY_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 60)"
+        echo "  DBPROXY_SWAP_THRESHOLD     Swap at N% context (default: 80)"
+        echo ""
+        echo "Logs: $DATA_DIR/logs/dbproxy.jsonl"
+        echo "Dashboard: https://localhost:${DASHBOARD_PORT}/dashboard"
+        exit 0
+        ;;
+esac
+
+# ── Resolve image ───────────────────────────────────────────────────────
+IMAGE_REF=""
+for candidate in "ghcr.io/anthropics/claude-db-proxy:latest" "claude-db-proxy:latest"; do
+    if $RT image exists "$candidate" 2>/dev/null || $RT inspect "$candidate" >/dev/null 2>&1; then
+        IMAGE_REF="$candidate"
+        break
+    fi
+done
+if [ -z "$IMAGE_REF" ]; then
+    echo "Image not found locally. Pulling..." >&2
+    IMAGE_REF="ghcr.io/anthropics/claude-db-proxy:latest"
+    $RT pull "$IMAGE_REF"
+fi
+
+# ── Start container if not running ──────────────────────────────────────
+if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | grep -q "$CONTAINER_NAME"; then
+    # Clean up stopped container with same name
+    $RT rm "$CONTAINER_NAME" 2>/dev/null || true
+
+    echo "Starting double-buffer proxy..."
+    $RT run -d \
+        --name "$CONTAINER_NAME" \
+        -p "127.0.0.1:${PROXY_PORT}:8080" \
+        -p "127.0.0.1:${DASHBOARD_PORT}:443" \
+        -v "$DATA_DIR/certs:/app/certs" \
+        -v "$DATA_DIR/data:/app/data" \
+        -v "$DATA_DIR/logs:/app/logs" \
+        -e "DBPROXY_HOST=0.0.0.0" \
+        -e "DBPROXY_LOG_LEVEL=${LOG_LEVEL}" \
+        -e "DBPROXY_CHECKPOINT_THRESHOLD=${DBPROXY_CHECKPOINT_THRESHOLD:-}" \
+        -e "DBPROXY_SWAP_THRESHOLD=${DBPROXY_SWAP_THRESHOLD:-}" \
+        --restart unless-stopped \
+        "$IMAGE_REF" >/dev/null
+
+    # Wait for health
+    printf "Waiting for proxy"
+    for _i in $(seq 1 30); do
+        if curl -fsk "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+            printf " ready.\n"
+            break
+        fi
+        printf "."
+        sleep 1
+    done
+fi
+
+# ── Verify CA cert ─────────────────────────────────────────────────────
+CA_CERT="$DATA_DIR/certs/ca.pem"
+if [ ! -f "$CA_CERT" ]; then
+    echo "ERROR: CA certificate not found at $CA_CERT" >&2
+    echo "Check: $RT logs $CONTAINER_NAME" >&2
+    exit 1
+fi
+
+# ── If 'start' subcommand, just report and exit ────────────────────────
+if [ "${_SUBCOMMAND:-}" = "start" ] || { [ "${1:-}" = "" ] && [ "$(basename "$0")" != "claude" ]; } && false; then
+    :
+fi
+
+# ── Launch Claude ──────────────────────────────────────────────────────
+export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
+export NODE_EXTRA_CA_CERTS="$CA_CERT"
+export DBPROXY_ACTIVE=1
+
+# Only print status if stdout is a terminal
+if [ -t 1 ]; then
+    printf '\033[0;36mDB Proxy: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
+fi
+
+exec claude "$@"
+WRAPPER_EOF
+
+    chmod +x "$WRAPPER"
+    ok "Installed: $WRAPPER"
+}
+
+# ── Configure Claude Code statusline ─────────────────────────────────────────
+configure_statusline() {
+    log "Configuring Claude Code status line..."
+
+    # Write statusline helper
+    STATUSLINE_SCRIPT="$DATA_DIR/statusline.sh"
+    cat > "$STATUSLINE_SCRIPT" << 'SL_EOF'
+#!/bin/sh
+# Claude DB Proxy statusline helper
+# Reads JSON from stdin (required by Claude Code), outputs status text.
+cat > /dev/null
+if [ -n "${DBPROXY_ACTIVE:-}" ]; then
+    printf 'DB_PROXY_ON'
+fi
+SL_EOF
+    chmod +x "$STATUSLINE_SCRIPT"
+
+    # Update settings.json
+    if [ -f "$CLAUDE_SETTINGS" ]; then
+        # Check if statusLine already configured
+        if python3 -c "
+import json, sys
+with open('$CLAUDE_SETTINGS') as f:
+    d = json.load(f)
+if 'statusLine' in d:
+    sys.exit(1)
+" 2>/dev/null; then
+            # No statusLine yet — add it
+            python3 -c "
+import json
+with open('$CLAUDE_SETTINGS') as f:
+    d = json.load(f)
+d['statusLine'] = {
+    'type': 'command',
+    'command': '$STATUSLINE_SCRIPT'
+}
+with open('$CLAUDE_SETTINGS', 'w') as f:
+    json.dump(d, f, indent=2)
+    f.write('\n')
+"
+            ok "Status line configured in $CLAUDE_SETTINGS"
+        else
+            warn "statusLine already configured in $CLAUDE_SETTINGS."
+            printf '  To add DB_PROXY_ON manually, append to your statusLine command:\n'
+            printf '  ; [ -n "\$DBPROXY_ACTIVE" ] && printf " | DB_PROXY_ON"\n\n'
+        fi
+    else
+        # Create settings.json
+        cat > "$CLAUDE_SETTINGS" << SETTINGS_EOF
+{
+  "statusLine": {
+    "type": "command",
+    "command": "$STATUSLINE_SCRIPT"
+  }
+}
+SETTINGS_EOF
+        ok "Created $CLAUDE_SETTINGS with status line."
+    fi
+}
+
+# ── Detect shell ─────────────────────────────────────────────────────────────
+detect_shell_config() {
+    SHELL_NAME="$(basename "${SHELL:-/bin/sh}")"
+    case "$SHELL_NAME" in
+        zsh)  SHELL_RC="$HOME/.zshrc" ;;
+        bash) SHELL_RC="$HOME/.bashrc" ;;
+        fish) SHELL_RC="$HOME/.config/fish/config.fish" ;;
+        *)    SHELL_RC="$HOME/.profile" ;;
+    esac
+}
+
+# ── Print next steps ─────────────────────────────────────────────────────────
+print_next_steps() {
+    detect_shell_config
+
+    printf '\n'
+    ok "Installation complete!"
+    printf '\n'
+    printf '  \033[1mNext steps:\033[0m\n\n'
+
+    # Check if ~/.local/bin is in PATH
+    case ":$PATH:" in
+        *":$INSTALL_DIR:"*) ;;
+        *)
+            printf '  1. Add ~/.local/bin to your PATH (if not already):\n'
+            if [ "$SHELL_NAME" = "fish" ]; then
+                printf '     \033[1;33mfish_add_path %s\033[0m\n\n' "$INSTALL_DIR"
+            else
+                printf '     \033[1;33mexport PATH="%s:\$PATH"\033[0m  # add to %s\n\n' "$INSTALL_DIR" "$SHELL_RC"
+            fi
+            ;;
+    esac
+
+    printf '  2. Add this alias so "claude" always uses the proxy:\n'
+    if [ "$SHELL_NAME" = "fish" ]; then
+        printf '     \033[1;33malias claude "claude-db-proxy"\033[0m  # add to %s\n\n' "$SHELL_RC"
+    else
+        printf '     \033[1;33malias claude="claude-db-proxy"\033[0m  # add to %s\n\n' "$SHELL_RC"
+    fi
+
+    printf '  3. Start using it:\n'
+    printf '     \033[1mclaude-db-proxy\033[0m           # launch Claude through proxy\n'
+    printf '     \033[1mclaude-db-proxy status\033[0m    # check proxy status\n'
+    printf '     \033[1mclaude-db-proxy logs\033[0m      # view proxy logs\n'
+    printf '     \033[1mclaude-db-proxy dashboard\033[0m # print dashboard URL\n'
+    printf '     \033[1mclaude-db-proxy stop\033[0m      # stop the proxy\n'
+    printf '\n'
+    printf '  Logs:      %s/logs/dbproxy.jsonl\n' "$DATA_DIR"
+    printf '  Dashboard: https://localhost:8443/dashboard\n'
+    printf '  Docs:      %s\n' "$REPO_URL"
+    printf '\n'
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+main() {
+    banner
+    detect_os
+    check_prereqs
+    detect_runtime
+    setup_dirs
+    get_image
+    generate_certs
+    install_wrapper
+    configure_statusline
+    print_next_steps
+}
+
+main "$@"

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Double Buffer Proxy Dashboard</title>
+    <link rel="stylesheet" href="/dashboard/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Double Buffer Proxy</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+    </header>
+
+    <main>
+        <section id="summary">
+            <div class="stat-card">
+                <div class="stat-value" id="conv-count">0</div>
+                <div class="stat-label">Active Conversations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="ws-status">--</div>
+                <div class="stat-label">WebSocket</div>
+            </div>
+        </section>
+
+        <section id="conversations">
+            <h2>Conversations</h2>
+            <div id="conv-list"></div>
+        </section>
+
+        <div id="detail-panel" class="detail-panel" style="display:none"></div>
+
+        <section id="event-log">
+            <h2>Event Log</h2>
+            <div id="events"></div>
+        </section>
+    </main>
+
+    <script src="/dashboard/static/dashboard.js"></script>
+</body>
+</html>
