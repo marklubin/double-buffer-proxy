@@ -349,11 +349,16 @@ configure_statusline() {
     STATUSLINE_SCRIPT="$DATA_DIR/statusline.sh"
     cat > "$STATUSLINE_SCRIPT" << 'SL_EOF'
 #!/bin/sh
-# Synix statusline helper
-# Reads JSON from stdin (required by Claude Code), outputs status text.
+# Synix statusline — shows proxy is active and healthy.
+# Claude Code pipes JSON on stdin (must be consumed).
 cat > /dev/null
-if [ -n "${SYNIX_ACTIVE:-}" ]; then
-    printf 'SYNIX_ON'
+if [ -z "${SYNIX_ACTIVE:-}" ]; then exit 0; fi
+
+PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+if curl -fsk --connect-timeout 1 --max-time 1 "https://localhost:${PORT}/health" >/dev/null 2>&1; then
+    printf '\033[1;38;5;48m⬡ synix\033[0m'
+else
+    printf '\033[1;38;5;48msynix\033[0m \033[31m○\033[0m'
 fi
 SL_EOF
     chmod +x "$STATUSLINE_SCRIPT"
