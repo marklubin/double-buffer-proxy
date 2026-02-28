@@ -263,6 +263,9 @@ case "${1:-}" in
         echo "  uninstall     Stop container and print cleanup instructions"
         echo "  proxy-help    Show this help"
         echo ""
+        echo "Flags:"
+        echo "  --full-access  Run Claude with --dangerously-skip-permissions"
+        echo ""
         echo "All other arguments are passed through to claude."
         echo ""
         echo "Environment:"
@@ -343,12 +346,21 @@ export NODE_EXTRA_CA_CERTS="$CA_CERT"
 export SYNIX_ACTIVE=1
 export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
 
+# Rewrite --full-access → --dangerously-skip-permissions
+_args=()
+for _a in "$@"; do
+    case "$_a" in
+        --full-access) _args+=("--dangerously-skip-permissions") ;;
+        *) _args+=("$_a") ;;
+    esac
+done
+
 # Only print status if stdout is a terminal
 if [ -t 1 ]; then
     printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
 fi
 
-exec claude "$@"
+exec claude "${_args[@]}"
 WRAPPER_EOF
 
     chmod +x "$WRAPPER"

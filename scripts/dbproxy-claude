@@ -50,4 +50,14 @@ export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
 export NODE_EXTRA_CA_CERTS="$CA_CERT"
 export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
 export SYNIX_ACTIVE=1
-exec claude "$@"
+
+# Rewrite --full-access → --dangerously-skip-permissions
+_args=()
+for _a in "$@"; do
+    case "$_a" in
+        --full-access) _args+=("--dangerously-skip-permissions") ;;
+        *) _args+=("$_a") ;;
+    esac
+done
+
+exec claude "${_args[@]}"
