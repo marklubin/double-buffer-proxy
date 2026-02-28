@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 72">
+  <!-- Buffer A (filled) -->
+  <rect x="4" y="8" width="20" height="56" rx="4" fill="#2a2a2a" stroke="#e8723a" stroke-width="2"/>
+  <rect x="4" y="24" width="20" height="40" rx="0 0 4 4" fill="#e8723a"/>
+  <!-- Swap arrows -->
+  <path d="M30 24 L40 24 L40 20 L48 28 L40 36 L40 32 L30 32 Z" fill="#666"/>
+  <path d="M48 40 L38 40 L38 36 L30 44 L38 52 L38 48 L48 48 Z" fill="#666"/>
+  <!-- Buffer B (less filled) -->
+  <rect x="52" y="8" width="20" height="56" rx="4" fill="#2a2a2a" stroke="#e8723a" stroke-width="2"/>
+  <rect x="52" y="44" width="20" height="20" rx="0 0 4 4" fill="#e8723a" opacity="0.6"/>
+  <!-- Text -->
+  <text x="86" y="48" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace" font-size="34" font-weight="700" fill="#1a1a1a" letter-spacing="-0.5">double buffer proxy</text>
+</svg>
