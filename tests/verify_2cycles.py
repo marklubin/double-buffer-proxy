@@ -31,7 +31,7 @@ DASHBOARD_HOST = os.environ.get("E2E_DASHBOARD_HOST", "127.0.0.1")
 DASHBOARD_PORT = int(os.environ.get("E2E_DASHBOARD_PORT", "8443"))
 TMUX_SESSION = os.environ.get("E2E_TMUX_SESSION", "ct")
 LOG_FILE = os.environ.get("E2E_LOG_FILE", os.path.expanduser(
-    "~/.local/share/synix/logs/dbproxy.jsonl"
+    "~/.local/share/synix-proxy/logs/dbproxy.jsonl"
 ))
 # Fallback to old location if new one doesn't exist
 if not os.path.exists(LOG_FILE):

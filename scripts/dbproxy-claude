@@ -45,7 +45,7 @@ if [ ! -f "$CA_CERT" ]; then
 fi
 
 # Launch Claude
-printf '\033[0;36mSynix: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
+printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
 export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
 export NODE_EXTRA_CA_CERTS="$CA_CERT"
 export SYNIX_ACTIVE=1

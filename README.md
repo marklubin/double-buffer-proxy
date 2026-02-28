@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/
 
 ```sh
 # Add to ~/.zshrc or ~/.bashrc
-alias claude="synix"
+alias claude="synix-proxy"
 ```
 
 That's it. Run `claude` as normal.
@@ -43,10 +43,10 @@ Real-time monitoring of all active conversations at `https://localhost:8443/dash
 claude                     # start proxy + launch Claude Code
 claude proxy-help          # proxy-specific help
 claude proxy-update        # update proxy image + wrapper
-synix status               # check if proxy is running
-synix stop                 # stop the proxy container
-synix logs                 # tail structured JSON logs
-synix dashboard            # print dashboard URL
+synix-proxy status         # check if proxy is running
+synix-proxy stop           # stop the proxy container
+synix-proxy logs           # tail structured JSON logs
+synix-proxy dashboard      # print dashboard URL
 ```
 
 ## Configuration
@@ -61,7 +61,7 @@ synix dashboard            # print dashboard URL
 | `SYNIX_DASHBOARD_PORT` | `8443` | Dashboard/proxy port |
 
 ```sh
-SYNIX_CHECKPOINT_THRESHOLD=0.60 synix
+SYNIX_CHECKPOINT_THRESHOLD=0.60 synix-proxy
 ```
 
 ## How It Works
@@ -102,5 +102,5 @@ docker compose build && docker compose up -d  # container
 ## Uninstall
 
 ```sh
-synix uninstall
+synix-proxy uninstall
 ```

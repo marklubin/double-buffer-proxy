@@ -9,11 +9,11 @@ set -eu
 # ── Configuration ────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/marklubin/double-buffer-proxy"
 IMAGE_REGISTRY="ghcr.io/marklubin"
-IMAGE_NAME="synix"
-CONTAINER_NAME="synix"
+IMAGE_NAME="synix-proxy"
+CONTAINER_NAME="synix-proxy"
 
 INSTALL_DIR="${HOME}/.local/bin"
-DATA_DIR="${HOME}/.local/share/synix"
+DATA_DIR="${HOME}/.local/share/synix-proxy"
 CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -148,17 +148,17 @@ generate_certs() {
 
 # ── Install wrapper script ──────────────────────────────────────────────────
 install_wrapper() {
-    WRAPPER="$INSTALL_DIR/synix"
-    log "Installing synix to $WRAPPER..."
+    WRAPPER="$INSTALL_DIR/synix-proxy"
+    log "Installing synix-proxy to $WRAPPER..."
 
     cat > "$WRAPPER" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
-# synix — Launch Claude Code through the Synix proxy.
+# synix-proxy — Launch Claude Code through the Synix proxy.
 # https://github.com/marklubin/double-buffer-proxy
 set -euo pipefail
 
-DATA_DIR="${SYNIX_DATA_DIR:-$HOME/.local/share/synix}"
-CONTAINER_NAME="synix"
+DATA_DIR="${SYNIX_DATA_DIR:-$HOME/.local/share/synix-proxy}"
+CONTAINER_NAME="synix-proxy"
 PROXY_PORT="${SYNIX_PROXY_PORT:-8080}"
 DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
 LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
@@ -231,12 +231,12 @@ case "${1:-}" in
         echo "To complete uninstall, remove:"
         echo "  rm $0"
         echo "  rm -rf $DATA_DIR"
-        echo "  # Remove 'alias claude=synix' from your shell config"
+        echo "  # Remove 'alias claude=synix-proxy' from your shell config"
         echo "  # Remove statusLine from ~/.claude/settings.json"
         exit 0
         ;;
     proxy-help)
-        echo "Usage: synix [command] [claude args...]"
+        echo "Usage: synix-proxy [command] [claude args...]"
         echo ""
         echo "Commands:"
         echo "  (default)     Start proxy (if needed) and launch Claude Code"
@@ -266,7 +266,7 @@ esac
 
 # ── Resolve image ───────────────────────────────────────────────────────
 IMAGE_REF=""
-for candidate in "ghcr.io/marklubin/synix:latest" "synix:latest"; do
+for candidate in "ghcr.io/marklubin/synix-proxy:latest" "synix-proxy:latest"; do
     if $RT image exists "$candidate" 2>/dev/null || $RT inspect "$candidate" >/dev/null 2>&1; then
         IMAGE_REF="$candidate"
         break
@@ -274,7 +274,7 @@ for candidate in "ghcr.io/marklubin/synix:latest" "synix:latest"; do
 done
 if [ -z "$IMAGE_REF" ]; then
     echo "Image not found locally. Pulling..." >&2
-    IMAGE_REF="ghcr.io/marklubin/synix:latest"
+    IMAGE_REF="ghcr.io/marklubin/synix-proxy:latest"
     $RT pull "$IMAGE_REF"
 fi
 
@@ -331,7 +331,7 @@ export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
 
 # Only print status if stdout is a terminal
 if [ -t 1 ]; then
-    printf '\033[0;36mSynix: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
+    printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
 fi
 
 exec claude "$@"
@@ -481,17 +481,17 @@ print_next_steps() {
 
     printf '  2. Add this alias so "claude" always uses the proxy:\n'
     if [ "$SHELL_NAME" = "fish" ]; then
-        printf '     \033[1;33malias claude "synix"\033[0m  # add to %s\n\n' "$SHELL_RC"
+        printf '     \033[1;33malias claude "synix-proxy"\033[0m  # add to %s\n\n' "$SHELL_RC"
     else
-        printf '     \033[1;33malias claude="synix"\033[0m  # add to %s\n\n' "$SHELL_RC"
+        printf '     \033[1;33malias claude="synix-proxy"\033[0m  # add to %s\n\n' "$SHELL_RC"
     fi
 
     printf '  3. Start using it:\n'
-    printf '     \033[1msynix\033[0m           # launch Claude through proxy\n'
-    printf '     \033[1msynix status\033[0m    # check proxy status\n'
-    printf '     \033[1msynix logs\033[0m      # view proxy logs\n'
-    printf '     \033[1msynix dashboard\033[0m # print dashboard URL\n'
-    printf '     \033[1msynix stop\033[0m      # stop the proxy\n'
+    printf '     \033[1msynix-proxy\033[0m           # launch Claude through proxy\n'
+    printf '     \033[1msynix-proxy status\033[0m    # check proxy status\n'
+    printf '     \033[1msynix-proxy logs\033[0m      # view proxy logs\n'
+    printf '     \033[1msynix-proxy dashboard\033[0m # print dashboard URL\n'
+    printf '     \033[1msynix-proxy stop\033[0m      # stop the proxy\n'
     printf '\n'
     printf '  Logs:      %s/logs/dbproxy.jsonl\n' "$DATA_DIR"
     printf '  Dashboard: https://localhost:8443/dashboard\n'
