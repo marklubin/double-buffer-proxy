@@ -214,7 +214,7 @@ case "${1:-}" in
         echo "https://localhost:${DASHBOARD_PORT}/dashboard"
         exit 0
         ;;
-    self-update)
+    proxy-update)
         echo "Updating claude-db-proxy..."
         echo "Stopping container..."
         $RT stop "$CONTAINER_NAME" 2>/dev/null || true
@@ -235,19 +235,21 @@ case "${1:-}" in
         echo "  # Remove statusLine from ~/.claude/settings.json"
         exit 0
         ;;
-    help|--help|-h)
+    proxy-help)
         echo "Usage: claude-db-proxy [command] [claude args...]"
         echo ""
         echo "Commands:"
-        echo "  (default)    Start proxy (if needed) and launch Claude Code"
-        echo "  start        Start the proxy container only"
-        echo "  stop         Stop the proxy container"
-        echo "  status       Show proxy status"
-        echo "  logs         Tail proxy logs (structured JSON)"
-        echo "  dashboard    Print dashboard URL"
-        echo "  self-update   Update proxy (pulls latest image + wrapper)"
-        echo "  uninstall    Stop container and print cleanup instructions"
-        echo "  help         Show this help"
+        echo "  (default)     Start proxy (if needed) and launch Claude Code"
+        echo "  start         Start the proxy container only"
+        echo "  stop          Stop the proxy container"
+        echo "  status        Show proxy status"
+        echo "  logs          Tail proxy logs (structured JSON)"
+        echo "  dashboard     Print dashboard URL"
+        echo "  proxy-update  Update proxy (pulls latest image + wrapper)"
+        echo "  uninstall     Stop container and print cleanup instructions"
+        echo "  proxy-help    Show this help"
+        echo ""
+        echo "All other arguments are passed through to claude."
         echo ""
         echo "Environment:"
         echo "  DBPROXY_LOG_LEVEL          Log level (default: INFO)"
