@@ -235,6 +235,19 @@ case "${1:-}" in
         echo "  # Remove statusLine from ~/.claude/settings.json"
         exit 0
         ;;
+    report-bug)
+        echo "Opening GitHub issue form..."
+        URL="https://github.com/marklubin/double-buffer-proxy/issues/new?labels=bug&template=bug_report.md"
+        if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open "$URL"
+        elif command -v open >/dev/null 2>&1; then
+            open "$URL"
+        else
+            echo "Open this URL to file a bug report:"
+            echo "  $URL"
+        fi
+        exit 0
+        ;;
     proxy-help)
         echo "Usage: synix-proxy [command] [claude args...]"
         echo ""
@@ -246,6 +259,7 @@ case "${1:-}" in
         echo "  logs          Tail proxy logs (structured JSON)"
         echo "  dashboard     Print dashboard URL"
         echo "  proxy-update  Update proxy (pulls latest image + wrapper)"
+        echo "  report-bug    Open GitHub issue form in browser"
         echo "  uninstall     Stop container and print cleanup instructions"
         echo "  proxy-help    Show this help"
         echo ""

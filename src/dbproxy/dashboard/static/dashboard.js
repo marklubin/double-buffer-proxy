@@ -31,7 +31,6 @@ function connect() {
             conversations[conv.key] = conv;
             render();
             addEvent(conv);
-            // Auto-refresh detail if this conversation is selected
             if (selectedKey && conv.key === selectedKey) {
                 loadDetail(selectedKey);
             }
@@ -51,7 +50,6 @@ function render() {
         const utilClass = c.utilization < 0.7 ? 'util-low' : c.utilization < 0.95 ? 'util-mid' : 'util-high';
         const selected = c.key === selectedKey ? ' conv-selected' : '';
         const msgCount = c.message_count != null ? ` | ${c.message_count} msgs` : '';
-        // Short model name for display
         const shortModel = c.model.replace('claude-', '').replace(/-\d{8}$/, '');
         return `
             <div class="conv-card${selected}" onclick="selectConv('${c.key}')">
@@ -64,7 +62,7 @@ function render() {
                     <div class="utilization-bar">
                         <div class="utilization-fill ${utilClass}" style="width: ${util}%"></div>
                     </div>
-                    <div style="font-size: 0.7rem; color: #8b949e; text-align: center; margin-top: 2px">${util}%</div>
+                    <div style="font-size: 0.65rem; color: var(--text-secondary); text-align: center; margin-top: 2px">${util}%</div>
                 </div>
                 <button class="btn-reset" onclick="event.stopPropagation(); resetConv('${c.conv_id}')">Reset</button>
             </div>
@@ -99,13 +97,68 @@ async function loadDetail(key) {
     }
 }
 
+/** Build an expandable content block — shows first ~120px with show/hide toggle. */
+function buildExpandable(text, id) {
+    const escaped = escapeHtml(text);
+    const needsExpand = text.length > 300;
+    if (!needsExpand) {
+        return `<div class="expandable-content expanded">${escaped}</div>`;
+    }
+    return `<div class="expandable">
+        <div class="expandable-content collapsed" id="${id}">${escaped}</div>
+        <div class="expand-fade" id="${id}-fade"></div>
+        <button class="btn-expand" id="${id}-btn" onclick="toggleExpand('${id}')">Show full content</button>
+    </div>`;
+}
+
+function toggleExpand(id) {
+    const el = document.getElementById(id);
+    const fade = document.getElementById(id + '-fade');
+    const btn = document.getElementById(id + '-btn');
+    if (el.classList.contains('collapsed')) {
+        el.classList.remove('collapsed');
+        el.classList.add('expanded');
+        if (fade) fade.style.display = 'none';
+        btn.textContent = 'Collapse';
+    } else {
+        el.classList.remove('expanded');
+        el.classList.add('collapsed');
+        if (fade) fade.style.display = '';
+        btn.textContent = 'Show full content';
+    }
+}
+
+/** Build a message preview with optional expand for long content. */
+function buildMsgPreview(text, msgId) {
+    const maxLen = 200;
+    if (text.length <= maxLen) {
+        return `<span class="msg-preview">${escapeHtml(text)}</span>`;
+    }
+    const short = text.substring(0, maxLen);
+    return `<span class="msg-preview" id="${msgId}">${escapeHtml(short)}…</span>
+        <button class="btn-msg-expand" onclick="toggleMsg('${msgId}', ${JSON.stringify(JSON.stringify(text))})">more</button>`;
+}
+
+function toggleMsg(id, fullJson) {
+    const el = document.getElementById(id);
+    const btn = el.nextElementSibling;
+    const full = JSON.parse(fullJson);
+    if (btn.textContent === 'more') {
+        el.textContent = full;
+        btn.textContent = 'less';
+    } else {
+        el.textContent = full.substring(0, 200) + '…';
+        btn.textContent = 'more';
+    }
+}
+
 function renderDetail(data) {
     const panel = document.getElementById('detail-panel');
     const anchor = data.wal_start_index;
     const hasCheckpoint = data.checkpoint_content && data.checkpoint_content.length > 0;
     const shortModel = data.model.replace('claude-', '').replace(/-\d{8}$/, '');
 
-    // Build messages list
+    // Messages
     let msgsHtml = '';
     if (data.messages && data.messages.length > 0) {
         msgsHtml = data.messages.map((m, i) => {
@@ -114,27 +167,28 @@ function renderDetail(data) {
                 zone = i < anchor ? 'msg-checkpointed' : 'msg-wal';
             }
             const roleClass = m.role === 'user' ? 'role-user' : m.role === 'assistant' ? 'role-assistant' : 'role-other';
+            const preview = buildMsgPreview(m.preview, `msg-${data.conv_id}-${i}`);
             return `<div class="msg-row ${zone}">
                 <span class="msg-index">${i}</span>
                 <span class="msg-role ${roleClass}">${m.role}</span>
-                <span class="msg-preview">${escapeHtml(m.preview)}</span>
+                ${preview}
             </div>`;
         }).join('');
     } else {
         msgsHtml = '<div class="detail-empty">No messages captured yet</div>';
     }
 
-    // Build checkpoint section
+    // Checkpoint
     let checkpointHtml = '';
     if (hasCheckpoint) {
         checkpointHtml = `
             <div class="detail-section">
                 <h3>Checkpoint Summary</h3>
-                <div class="checkpoint-content">${escapeHtml(data.checkpoint_content)}</div>
+                ${buildExpandable(data.checkpoint_content, 'ckpt-' + data.conv_id)}
             </div>`;
     }
 
-    // Anchor marker
+    // Anchor
     let anchorHtml = '';
     if (anchor != null) {
         anchorHtml = `<div class="detail-meta">
@@ -185,7 +239,7 @@ function addEvent(conv) {
     const line = document.createElement('div');
     line.className = 'event-line';
     const shortModel = conv.model.replace('claude-', '').replace(/-\d{8}$/, '');
-    line.innerHTML = `<span style="color:#6e7681">${time}</span> <span class="event-type">${conv.phase}</span> ${conv.conv_id} <span style="color:#8b949e">${shortModel}</span> (${(conv.utilization * 100).toFixed(1)}%)`;
+    line.innerHTML = `<span style="color:var(--text-muted)">${time}</span> <span class="event-type">${conv.phase}</span> ${conv.conv_id} <span style="color:var(--text-secondary)">${shortModel}</span> (${(conv.utilization * 100).toFixed(1)}%)`;
     events.prepend(line);
     while (events.children.length > 200) events.lastChild.remove();
 }
@@ -195,7 +249,7 @@ function addError(data) {
     const time = new Date().toLocaleTimeString();
     const line = document.createElement('div');
     line.className = 'event-line';
-    line.innerHTML = `<span style="color:#6e7681">${time}</span> <span style="color:#f85149;font-weight:bold">ERROR ${data.status}</span> ${data.conv_id} <span style="color:#f85149">${escapeHtml(data.body).substring(0, 200)}</span>`;
+    line.innerHTML = `<span style="color:var(--text-muted)">${time}</span> <span style="color:var(--accent-red);font-weight:bold">ERROR ${data.status}</span> ${data.conv_id} <span style="color:var(--accent-red)">${escapeHtml(data.body).substring(0, 200)}</span>`;
     events.prepend(line);
     while (events.children.length > 200) events.lastChild.remove();
 }

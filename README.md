@@ -47,6 +47,7 @@ synix-proxy status         # check if proxy is running
 synix-proxy stop           # stop the proxy container
 synix-proxy logs           # tail structured JSON logs
 synix-proxy dashboard      # print dashboard URL
+synix-proxy report-bug     # open GitHub issue form
 ```
 
 ## Configuration
@@ -86,6 +87,36 @@ The proxy uses Claude Code's native `HTTPS_PROXY` support, scoped to the `claude
 | **SWAP_READY** | Pre-computed checkpoint ready to serve on next compact request. |
 
 The proxy never initiates compaction — Claude Code drives the process. When Claude sends a compact request, the proxy returns the pre-computed checkpoint if available, or forwards to the API if not. The proxy never blocks or degrades the experience.
+
+## FAQ
+
+**Why do I see multiple conversations in the dashboard?**
+
+Each Claude Code session gets its own conversation in the proxy. If you open multiple terminals, or restart Claude Code, each gets tracked separately. The proxy identifies conversations by a session UUID embedded in Claude Code's API requests. Old conversations are automatically cleaned up after 2 hours of inactivity.
+
+**How does conversation deduplication work?**
+
+The proxy fingerprints each conversation using the `metadata.user_id` field that Claude Code sends with every API request. This contains a session UUID that uniquely identifies each Claude Code process. If the same session reconnects (e.g., after a brief network interruption), the proxy picks up where it left off with the same checkpoint state. Different sessions — even in the same project directory — are tracked independently.
+
+**What if the proxy is down when Claude compacts?**
+
+If the proxy container stops or the health check fails, Claude Code falls back to its native compaction behavior automatically. The proxy never blocks — if anything goes wrong, Claude Code talks directly to the Anthropic API as if the proxy wasn't there.
+
+**Does this work with Claude Max / OAuth?**
+
+Yes. The proxy forwards OAuth `Authorization: Bearer` tokens transparently. It works with both API keys (`x-api-key`) and OAuth sessions.
+
+**Can I use this with multiple models?**
+
+Yes. The proxy tracks context windows per-model (Opus, Sonnet, Haiku all have their own context window sizes configured). Each conversation is tracked with the model it's using.
+
+**Found a bug?**
+
+```sh
+synix-proxy report-bug    # opens GitHub issue form
+```
+
+Or file directly at [github.com/marklubin/double-buffer-proxy/issues](https://github.com/marklubin/double-buffer-proxy/issues).
 
 ## Development
 

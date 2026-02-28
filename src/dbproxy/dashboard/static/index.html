@@ -8,7 +8,53 @@
 </head>
 <body>
     <header>
-        <h1>Synix</h1>
+        <div class="header-brand">
+            <svg class="header-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="24" height="24">
+                <defs>
+                    <clipPath id="tri"><polygon points="20,20 20,180 180,100"/></clipPath>
+                    <style>.w{fill:none;stroke-width:1.6;stroke-linecap:round;vector-effect:non-scaling-stroke}</style>
+                </defs>
+                <g clip-path="url(#tri)">
+                    <line class="w" x1="20" y1="40" x2="60" y2="60" stroke="#3A6FA6"/>
+                    <line class="w" x1="20" y1="40" x2="60" y2="80" stroke="#2F8A55"/>
+                    <line class="w" x1="20" y1="80" x2="60" y2="60" stroke="#2C8C8C"/>
+                    <line class="w" x1="20" y1="80" x2="60" y2="80" stroke="#A44A4A"/>
+                    <line class="w" x1="20" y1="80" x2="60" y2="100" stroke="#5F5F5F"/>
+                    <line class="w" x1="20" y1="120" x2="60" y2="100" stroke="#3A6FA6"/>
+                    <line class="w" x1="20" y1="120" x2="60" y2="120" stroke="#2F8A55"/>
+                    <line class="w" x1="20" y1="160" x2="60" y2="120" stroke="#2C8C8C"/>
+                    <line class="w" x1="20" y1="160" x2="60" y2="140" stroke="#A44A4A"/>
+                    <line class="w" x1="60" y1="60" x2="100" y2="80" stroke="#3A6FA6"/>
+                    <line class="w" x1="60" y1="80" x2="100" y2="80" stroke="#2F8A55"/>
+                    <line class="w" x1="60" y1="100" x2="100" y2="100" stroke="#2C8C8C"/>
+                    <line class="w" x1="60" y1="120" x2="100" y2="100" stroke="#A44A4A"/>
+                    <line class="w" x1="60" y1="120" x2="100" y2="120" stroke="#5F5F5F"/>
+                    <line class="w" x1="60" y1="140" x2="100" y2="120" stroke="#3A6FA6"/>
+                    <line class="w" x1="100" y1="80" x2="140" y2="90" stroke="#3A6FA6"/>
+                    <line class="w" x1="100" y1="100" x2="140" y2="90" stroke="#2F8A55"/>
+                    <line class="w" x1="100" y1="100" x2="140" y2="110" stroke="#2C8C8C"/>
+                    <line class="w" x1="100" y1="120" x2="140" y2="110" stroke="#A44A4A"/>
+                    <line class="w" x1="140" y1="90" x2="180" y2="100" stroke="#3A6FA6"/>
+                    <line class="w" x1="140" y1="110" x2="180" y2="100" stroke="#2F8A55"/>
+                    <circle cx="20" cy="40" r="4" fill="#3A6FA6"/>
+                    <circle cx="20" cy="80" r="4" fill="#2F8A55"/>
+                    <circle cx="20" cy="120" r="4" fill="#2C8C8C"/>
+                    <circle cx="20" cy="160" r="4" fill="#A44A4A"/>
+                    <circle cx="60" cy="60" r="4" fill="#3A6FA6"/>
+                    <circle cx="60" cy="80" r="4" fill="#2F8A55"/>
+                    <circle cx="60" cy="100" r="4" fill="#2C8C8C"/>
+                    <circle cx="60" cy="120" r="4" fill="#A44A4A"/>
+                    <circle cx="60" cy="140" r="4" fill="#5F5F5F"/>
+                    <circle cx="100" cy="80" r="4" fill="#3A6FA6"/>
+                    <circle cx="100" cy="100" r="4" fill="#2C8C8C"/>
+                    <circle cx="100" cy="120" r="4" fill="#A44A4A"/>
+                    <circle cx="140" cy="90" r="4" fill="#3A6FA6"/>
+                    <circle cx="140" cy="110" r="4" fill="#2F8A55"/>
+                    <circle cx="180" cy="100" r="5" fill="#2F8A55"/>
+                </g>
+            </svg>
+            <h1>synix</h1>
+        </div>
         <div id="status" class="status disconnected">Disconnected</div>
     </header>
 
@@ -36,6 +82,12 @@
             <div id="events"></div>
         </section>
     </main>
+
+    <footer class="dashboard-footer">
+        <a href="https://synix.dev">synix.dev</a> &middot;
+        <a href="https://github.com/marklubin/double-buffer-proxy">source</a> &middot;
+        <a href="https://github.com/marklubin/double-buffer-proxy/issues/new">report a bug</a>
+    </footer>
 
     <script src="/dashboard/static/dashboard.js"></script>
 </body>
