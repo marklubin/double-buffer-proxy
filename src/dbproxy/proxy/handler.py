@@ -183,6 +183,13 @@ class MessageHandler:
             )
         client_wants_compact = is_compact_request(body)
         if client_wants_compact:
+            # Strip the compact prompt from stored messages so it doesn't
+            # leak into the WAL section of the synthetic response.  If the
+            # compact prompt ends up in the summary, the next request will
+            # contain it and trigger another compact detection loop.
+            if mgr._all_messages and mgr._all_messages[-1].get("role") == "user":
+                mgr._all_messages = mgr._all_messages[:-1]
+
             synthetic = await mgr.handle_client_compact(
                 stream=stream,
                 http_client=self.http_client,
