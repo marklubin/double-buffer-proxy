@@ -518,11 +518,12 @@ print_next_steps() {
     fi
 
     printf '  3. Start using it:\n'
-    printf '     \033[1msynix-proxy\033[0m           # launch Claude through proxy\n'
-    printf '     \033[1msynix-proxy status\033[0m    # check proxy status\n'
-    printf '     \033[1msynix-proxy logs\033[0m      # view proxy logs\n'
-    printf '     \033[1msynix-proxy dashboard\033[0m # print dashboard URL\n'
-    printf '     \033[1msynix-proxy stop\033[0m      # stop the proxy\n'
+    printf '     \033[1msynix-proxy\033[0m              # launch Claude through proxy\n'
+    printf '     \033[1msynix-proxy --full-access\033[0m # skip all permission prompts\n'
+    printf '     \033[1msynix-proxy status\033[0m       # check proxy status\n'
+    printf '     \033[1msynix-proxy logs\033[0m         # view proxy logs\n'
+    printf '     \033[1msynix-proxy dashboard\033[0m    # print dashboard URL\n'
+    printf '     \033[1msynix-proxy stop\033[0m         # stop the proxy\n'
     printf '\n'
     printf '  Logs:      %s/logs/dbproxy.jsonl\n' "$DATA_DIR"
     printf '  Dashboard: https://localhost:47201/dashboard\n'
