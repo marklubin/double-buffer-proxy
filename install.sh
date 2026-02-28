@@ -219,6 +219,9 @@ case "${1:-}" in
         echo "Stopping container..."
         $RT stop "$CONTAINER_NAME" 2>/dev/null || true
         $RT rm "$CONTAINER_NAME" 2>/dev/null || true
+        echo "Removing old image..."
+        $RT rmi "ghcr.io/marklubin/synix-proxy:latest" 2>/dev/null || true
+        $RT rmi "synix-proxy:latest" 2>/dev/null || true
         echo "Re-running installer (pulls latest image + updates wrapper)..."
         curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
         exit $?
