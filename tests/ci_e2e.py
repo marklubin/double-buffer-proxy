@@ -15,7 +15,7 @@ Usage:
 Environment:
     ANTHROPIC_API_KEY     — required
     PROXY_PORT            — CONNECT redirector port (default: 47200)
-    DASHBOARD_PORT        — dashboard/health port (default: 8443)
+    DASHBOARD_PORT        — dashboard/health port (default: 47201)
     CA_CERT               — path to ca.pem (default: certs/ca.pem)
     MAX_ROUNDS            — max conversation rounds (default: 40)
     TIMEOUT_SECONDS       — overall timeout (default: 600)
@@ -36,7 +36,7 @@ import urllib.error
 # ---------------------------------------------------------------------------
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "47200"))
-DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "8443"))
+DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "47201"))
 CA_CERT = os.environ.get("CA_CERT", "certs/ca.pem")
 MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "40"))
 TIMEOUT = int(os.environ.get("TIMEOUT_SECONDS", "600"))

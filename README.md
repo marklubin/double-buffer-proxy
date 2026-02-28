@@ -33,7 +33,7 @@ A local proxy that sits between Claude Code and the Anthropic API on your machin
 
 ## Dashboard
 
-Real-time monitoring of all active conversations at `https://localhost:8443/dashboard`.
+Real-time monitoring of all active conversations at `https://localhost:47201/dashboard`.
 
 ![Dashboard showing conversation state and event log](docs/dash.png)
 
@@ -59,7 +59,7 @@ synix-proxy report-bug     # open GitHub issue form
 | `SYNIX_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `SYNIX_PASSTHROUGH` | `false` | Disable buffer logic (pure proxy mode) |
 | `SYNIX_PROXY_PORT` | `47200` | CONNECT redirector port |
-| `SYNIX_DASHBOARD_PORT` | `8443` | Dashboard/proxy port |
+| `SYNIX_DASHBOARD_PORT` | `47201` | Dashboard/proxy port |
 
 ```sh
 SYNIX_CHECKPOINT_THRESHOLD=0.60 synix-proxy

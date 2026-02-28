@@ -37,11 +37,11 @@ jobs:
         run: |
           docker run -d --name synix-test \
             -p 127.0.0.1:47200:47200 \
-            -p 127.0.0.1:8443:443 \
+            -p 127.0.0.1:47201:443 \
             synix-proxy:test
           echo "Waiting for health..."
           for i in $(seq 1 30); do
-            if curl -fsk https://localhost:8443/health 2>/dev/null; then
+            if curl -fsk https://localhost:47201/health 2>/dev/null; then
               echo ""
               echo "Healthy!"
               exit 0
@@ -67,7 +67,7 @@ jobs:
 
       - name: Smoke test — health endpoint content
         run: |
-          health=$(curl -fsk https://localhost:8443/health)
+          health=$(curl -fsk https://localhost:47201/health)
           echo "$health"
           echo "$health" | python3 -c "
           import json, sys

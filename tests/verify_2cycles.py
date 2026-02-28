@@ -28,7 +28,7 @@ import urllib.request
 # Config
 # ---------------------------------------------------------------------------
 DASHBOARD_HOST = os.environ.get("E2E_DASHBOARD_HOST", "127.0.0.1")
-DASHBOARD_PORT = int(os.environ.get("E2E_DASHBOARD_PORT", "8443"))
+DASHBOARD_PORT = int(os.environ.get("E2E_DASHBOARD_PORT", "47201"))
 TMUX_SESSION = os.environ.get("E2E_TMUX_SESSION", "ct")
 LOG_FILE = os.environ.get("E2E_LOG_FILE", os.path.expanduser(
     "~/.local/share/synix-proxy/logs/dbproxy.jsonl"

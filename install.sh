@@ -160,7 +160,7 @@ set -euo pipefail
 DATA_DIR="${SYNIX_DATA_DIR:-$HOME/.local/share/synix-proxy}"
 CONTAINER_NAME="synix-proxy"
 PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
-DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
 LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
 # ── Detect container runtime ────────────────────────────────────────────
@@ -268,7 +268,7 @@ case "${1:-}" in
         echo "Environment:"
         echo "  SYNIX_LOG_LEVEL          Log level (default: INFO)"
         echo "  SYNIX_PROXY_PORT         Redirector port (default: 47200)"
-        echo "  SYNIX_DASHBOARD_PORT     Dashboard port (default: 8443)"
+        echo "  SYNIX_DASHBOARD_PORT     Dashboard port (default: 47201)"
         echo "  SYNIX_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 70)"
         echo "  SYNIX_SWAP_THRESHOLD     Swap at N% context (default: 80)"
         echo ""
@@ -368,7 +368,7 @@ configure_statusline() {
 cat > /dev/null
 if [ -z "${SYNIX_ACTIVE:-}" ]; then exit 0; fi
 
-PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+PORT="${SYNIX_DASHBOARD_PORT:-47201}"
 if curl -fsk --connect-timeout 1 --max-time 1 "https://localhost:${PORT}/health" >/dev/null 2>&1; then
     printf '\033[1;38;5;48m⬡ synix\033[0m'
 else
@@ -434,7 +434,7 @@ detect_shell_config() {
 # ── Smoke test — start container and verify health ───────────────────────────
 smoke_test() {
     PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
-    DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+    DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
     LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
     log "Starting proxy container..."
@@ -513,7 +513,7 @@ print_next_steps() {
     printf '     \033[1msynix-proxy stop\033[0m      # stop the proxy\n'
     printf '\n'
     printf '  Logs:      %s/logs/dbproxy.jsonl\n' "$DATA_DIR"
-    printf '  Dashboard: https://localhost:8443/dashboard\n'
+    printf '  Dashboard: https://localhost:47201/dashboard\n'
     printf '  Docs:      %s\n' "$REPO_URL"
     printf '\n'
 }
