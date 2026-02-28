@@ -214,6 +214,15 @@ case "${1:-}" in
         echo "https://localhost:${DASHBOARD_PORT}/dashboard"
         exit 0
         ;;
+    update)
+        echo "Updating claude-db-proxy..."
+        echo "Stopping container..."
+        $RT stop "$CONTAINER_NAME" 2>/dev/null || true
+        $RT rm "$CONTAINER_NAME" 2>/dev/null || true
+        echo "Re-running installer (pulls latest image + updates wrapper)..."
+        curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
+        exit $?
+        ;;
     uninstall)
         echo "Stopping container..."
         $RT stop "$CONTAINER_NAME" 2>/dev/null || true
@@ -236,6 +245,7 @@ case "${1:-}" in
         echo "  status       Show proxy status"
         echo "  logs         Tail proxy logs (structured JSON)"
         echo "  dashboard    Print dashboard URL"
+        echo "  update       Update proxy (pulls latest image + wrapper)"
         echo "  uninstall    Stop container and print cleanup instructions"
         echo "  help         Show this help"
         echo ""
@@ -243,7 +253,7 @@ case "${1:-}" in
         echo "  DBPROXY_LOG_LEVEL          Log level (default: INFO)"
         echo "  DBPROXY_PROXY_PORT         Redirector port (default: 8080)"
         echo "  DBPROXY_DASHBOARD_PORT     Dashboard port (default: 8443)"
-        echo "  DBPROXY_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 60)"
+        echo "  DBPROXY_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 70)"
         echo "  DBPROXY_SWAP_THRESHOLD     Swap at N% context (default: 80)"
         echo ""
         echo "Logs: $DATA_DIR/logs/dbproxy.jsonl"
