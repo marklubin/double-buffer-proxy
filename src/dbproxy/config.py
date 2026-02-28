@@ -9,7 +9,7 @@ class ProxyConfig(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 443
     upstream_url: str = "https://api.anthropic.com"
-    checkpoint_threshold: float = 0.60
+    checkpoint_threshold: float = 0.70
     swap_threshold: float = 0.80
     max_sse_buffer_bytes: int = 50_000_000  # 50 MB
     db_path: str = "data/dbproxy.sqlite"

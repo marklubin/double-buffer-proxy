@@ -65,14 +65,14 @@ The proxy pre-computes conversation checkpoints in the background. When Claude C
 ```
 Context Window Utilization
 │
-│  0%─────────60%──────────────────80%───────100%
+│  0%─────────70%──────────────────80%───────100%
 │  │           │                    │          │
 │  │   IDLE    │  Proxy checkpoints │  Claude  │
 │  │           │  in background     │  auto-   │
 │  │           │                    │  compacts│
 │  ▼           ▼                    ▼          ▼
 │
-│  Proxy:     Background checkpoint at 60% (pre-compute summary)
+│  Proxy:     Background checkpoint at 70% (pre-compute summary)
 │  Claude:    Drives compaction at 80% (CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80)
 │  Intercept: Compact request → return pre-computed checkpoint instantly
 │
@@ -179,7 +179,7 @@ All settings via environment variables (prefix `DBPROXY_`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DBPROXY_CHECKPOINT_THRESHOLD` | `0.60` | Pre-compute checkpoint at this % of context window |
+| `DBPROXY_CHECKPOINT_THRESHOLD` | `0.70` | Pre-compute checkpoint at this % of context window |
 | `DBPROXY_SWAP_THRESHOLD` | `0.80` | Mark checkpoint ready to serve at this % |
 | `DBPROXY_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `DBPROXY_PASSTHROUGH` | `false` | Disable buffer logic (pure proxy mode) |
