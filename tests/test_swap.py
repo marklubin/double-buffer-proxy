@@ -31,14 +31,14 @@ class TestSerializeMessage:
             {"type": "tool_result", "content": "file contents here"},
         ]}
         result = _serialize_message(msg)
-        assert "[tool_result: file contents here]" in result
+        assert "[tool_result] file contents here" in result
 
     def test_tool_result_block_list(self):
         msg = {"role": "user", "content": [
             {"type": "tool_result", "content": [{"type": "text", "text": "ok"}]},
         ]}
         result = _serialize_message(msg)
-        assert "[tool_result: ok]" in result
+        assert "[tool_result] ok" in result
 
     def test_compaction_block(self):
         msg = {"role": "assistant", "content": [{"type": "compaction", "content": "..."}]}
@@ -57,15 +57,16 @@ class TestSerializeMessage:
             {"type": "tool_use", "name": "write", "input": {"data": "x" * 500}},
         ]}
         result = _serialize_message(msg)
-        # JSON serialization of input is truncated to 200 chars
-        assert len(result) < 300
+        # Compact JSON of input is truncated to 150 chars
+        assert len(result) < 250
 
     def test_tool_result_truncation(self):
         msg = {"role": "user", "content": [
             {"type": "tool_result", "content": "y" * 1000},
         ]}
         result = _serialize_message(msg)
-        assert len(result) < 600
+        # Tool results truncated to ~300 chars
+        assert len(result) < 400
 
 
 class TestFormatCompactionWithWal:

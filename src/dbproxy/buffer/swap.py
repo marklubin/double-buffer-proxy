@@ -25,8 +25,42 @@ from dbproxy.proxy.sse_parser import SSEEvent
 log = structlog.get_logger()
 
 
+def _summarize_tool_result(block: dict[str, Any]) -> str:
+    """Summarize a tool_result block concisely for WAL serialization.
+
+    Tool results (file contents, command output, etc.) can be enormous.
+    The model can re-read files after compaction, so we only need to
+    preserve what tool was called and a brief indication of the result.
+    """
+    tool_use_id = block.get("tool_use_id", "")
+    result_content = block.get("content", "")
+    is_error = block.get("is_error", False)
+
+    if isinstance(result_content, list):
+        # Extract text blocks, truncate each
+        texts = []
+        for b in result_content:
+            if isinstance(b, dict) and b.get("type") == "text":
+                t = b.get("text", "")
+                texts.append(t[:200] + "..." if len(t) > 200 else t)
+        result_content = " ".join(texts)
+    else:
+        result_content = str(result_content)
+
+    if len(result_content) > 300:
+        result_content = result_content[:300] + "..."
+
+    prefix = "[tool_result ERROR]" if is_error else "[tool_result]"
+    return f"{prefix} {result_content}"
+
+
 def _serialize_message(msg: dict[str, Any]) -> str:
-    """Serialize a single message dict to readable text."""
+    """Serialize a single message dict for WAL inclusion.
+
+    Preserves full conversational text (user questions, assistant
+    reasoning) but heavily compresses tool interactions since the
+    model can re-invoke tools after compaction.
+    """
     role = msg.get("role", "unknown")
     content = msg.get("content", "")
 
@@ -43,17 +77,28 @@ def _serialize_message(msg: dict[str, Any]) -> str:
             elif block.get("type") == "text":
                 parts.append(block.get("text", ""))
             elif block.get("type") == "tool_use":
-                parts.append(
-                    f"[tool_use: {block.get('name', '?')}"
-                    f"({json.dumps(block.get('input', {}))[:200]})]"
-                )
+                name = block.get("name", "?")
+                inp = block.get("input", {})
+                # Show key args concisely
+                brief = ""
+                if isinstance(inp, dict):
+                    # Try common arg names for a brief summary
+                    for key in ("file_path", "path", "pattern", "command", "query", "url"):
+                        val = inp.get(key)
+                        if val and isinstance(val, str):
+                            brief = val
+                            break
+                    if not brief:
+                        # Fallback: compact JSON of input
+                        brief = json.dumps(inp, separators=(",", ":"))
+                    if len(brief) > 150:
+                        brief = brief[:150] + "..."
+                if brief:
+                    parts.append(f"[tool_use: {name}({brief})]")
+                else:
+                    parts.append(f"[tool_use: {name}]")
             elif block.get("type") == "tool_result":
-                result_content = block.get("content", "")
-                if isinstance(result_content, list):
-                    result_content = " ".join(
-                        b.get("text", "") for b in result_content if isinstance(b, dict)
-                    )
-                parts.append(f"[tool_result: {str(result_content)[:500]}]")
+                parts.append(_summarize_tool_result(block))
             elif block.get("type") == "compaction":
                 parts.append("[prior compaction summary]")
             else:
@@ -89,7 +134,12 @@ def format_compaction_with_wal(
     if wal_messages:
         serialized = "\n\n".join(_serialize_message(msg) for msg in wal_messages)
         parts.append("")
-        parts.append("The following messages occurred after the summary above was generated and are reproduced verbatim:")
+        parts.append(
+            "The following conversation continued after the summary above was generated. "
+            "This is what was being discussed most recently. "
+            "Tool results are abbreviated — re-read files if you need full contents. "
+            "Continue from where this conversation left off."
+        )
         parts.append("<recent_activity>")
         parts.append(serialized)
         parts.append("</recent_activity>")

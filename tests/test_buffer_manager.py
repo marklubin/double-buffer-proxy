@@ -247,7 +247,7 @@ class TestSwapWalStitching:
         result = await mgr.execute_swap(stream=False)
         content = result["content"][0]["text"]
         assert "[tool_use: Read(" in content
-        assert "[tool_result: def main():" in content
+        assert "[tool_result] def main():" in content
         assert "Let me read that file." in content
         assert "The file contains a main function." in content
 
