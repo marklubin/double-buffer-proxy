@@ -48,5 +48,6 @@ fi
 printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
 export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
 export NODE_EXTRA_CA_CERTS="$CA_CERT"
+export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
 export SYNIX_ACTIVE=1
 exec claude "$@"

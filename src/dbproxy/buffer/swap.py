@@ -89,6 +89,7 @@ def format_compaction_with_wal(
     if wal_messages:
         serialized = "\n\n".join(_serialize_message(msg) for msg in wal_messages)
         parts.append("")
+        parts.append("The following messages occurred after the summary above was generated and are reproduced verbatim:")
         parts.append("<recent_activity>")
         parts.append(serialized)
         parts.append("</recent_activity>")
