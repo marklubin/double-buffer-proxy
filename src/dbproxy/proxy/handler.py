@@ -120,6 +120,13 @@ class MessageHandler:
         auth_headers["_query_string"] = request.query_string or ""
 
         # Fingerprint the conversation
+        raw_metadata = body.get("metadata", {})
+        if isinstance(raw_metadata, dict):
+            log.info(
+                "request_metadata",
+                metadata_keys=sorted(raw_metadata.keys()),
+                user_id=str(raw_metadata.get("user_id", ""))[:80],
+            )
         fingerprint = compute_fingerprint(body)
         context_window = self.config.context_window_for(model)
         mgr = self.registry.get_or_create(fingerprint, model, context_window)

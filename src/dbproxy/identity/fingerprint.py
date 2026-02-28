@@ -19,6 +19,10 @@ import json
 import re
 from typing import Any
 
+import structlog
+
+log = structlog.get_logger()
+
 # How many characters of the system prompt to include in the fallback
 # fingerprint.  Claude Code's stable base instructions are several KB;
 # 1000 chars captures the identity without the dynamic tail.
@@ -78,7 +82,18 @@ def compute_fingerprint(body: dict[str, Any]) -> str:
     conversation).  Falls back to hashing system prompt + first user
     message if metadata is not available.
     """
+    metadata = body.get("metadata", {})
+    user_id = metadata.get("user_id", "") if isinstance(metadata, dict) else ""
+
     session_id = _extract_session_id(body)
     if session_id:
+        log.debug(
+            "fingerprint_session",
+            session_id=session_id[:16],
+            user_id=user_id[:80] if user_id else None,
+        )
         return session_id
-    return _fallback_fingerprint(body)
+
+    fp = _fallback_fingerprint(body)
+    log.debug("fingerprint_fallback", fingerprint=fp[:16])
+    return fp
