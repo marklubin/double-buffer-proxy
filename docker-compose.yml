@@ -2,7 +2,7 @@ services:
   dbproxy:
     build: .
     ports:
-      - "127.0.0.1:8080:8080"   # CONNECT redirector (localhost only)
+      - "127.0.0.1:47200:47200"   # CONNECT redirector (localhost only)
       - "8443:443"               # Dashboard + proxy (browser access)
     volumes:
       - ./certs:/app/certs       # TLS certs (shared with host for NODE_EXTRA_CA_CERTS)

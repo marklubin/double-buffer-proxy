@@ -159,7 +159,7 @@ set -euo pipefail
 
 DATA_DIR="${SYNIX_DATA_DIR:-$HOME/.local/share/synix-proxy}"
 CONTAINER_NAME="synix-proxy"
-PROXY_PORT="${SYNIX_PROXY_PORT:-8080}"
+PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
 DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
 LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
@@ -267,7 +267,7 @@ case "${1:-}" in
         echo ""
         echo "Environment:"
         echo "  SYNIX_LOG_LEVEL          Log level (default: INFO)"
-        echo "  SYNIX_PROXY_PORT         Redirector port (default: 8080)"
+        echo "  SYNIX_PROXY_PORT         Redirector port (default: 47200)"
         echo "  SYNIX_DASHBOARD_PORT     Dashboard port (default: 8443)"
         echo "  SYNIX_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 70)"
         echo "  SYNIX_SWAP_THRESHOLD     Swap at N% context (default: 80)"
@@ -300,7 +300,7 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
     echo "Starting Synix proxy..."
     $RT run -d \
         --name "$CONTAINER_NAME" \
-        -p "127.0.0.1:${PROXY_PORT}:8080" \
+        -p "127.0.0.1:${PROXY_PORT}:47200" \
         -p "127.0.0.1:${DASHBOARD_PORT}:443" \
         -v "$DATA_DIR/certs:/app/certs" \
         -v "$DATA_DIR/data:/app/data" \
@@ -433,7 +433,7 @@ detect_shell_config() {
 
 # ── Smoke test — start container and verify health ───────────────────────────
 smoke_test() {
-    PROXY_PORT="${SYNIX_PROXY_PORT:-8080}"
+    PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
     DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
     LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
@@ -444,7 +444,7 @@ smoke_test() {
 
     $RT_CMD run -d \
         --name "$CONTAINER_NAME" \
-        -p "127.0.0.1:${PROXY_PORT}:8080" \
+        -p "127.0.0.1:${PROXY_PORT}:47200" \
         -p "127.0.0.1:${DASHBOARD_PORT}:443" \
         -v "$DATA_DIR/certs:/app/certs" \
         -v "$DATA_DIR/data:/app/data" \

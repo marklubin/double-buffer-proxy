@@ -46,7 +46,7 @@ LABEL org.opencontainers.image.title="Synix Claude Proxy" \
       org.opencontainers.image.description="Pre-computes conversation summaries so Claude Code compaction is instant" \
       org.opencontainers.image.version="${VERSION}"
 
-EXPOSE 443 8080
+EXPOSE 443 47200
 
 HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsk https://localhost:443/health || exit 1

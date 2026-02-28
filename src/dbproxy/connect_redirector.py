@@ -19,7 +19,7 @@ log = structlog.get_logger()
 
 REDIRECT_HOST = "api.anthropic.com"
 PROXY_TARGET = ("127.0.0.1", 443)
-LISTEN_PORT = int(os.environ.get("SYNIX_REDIRECTOR_PORT", "8080"))
+LISTEN_PORT = int(os.environ.get("SYNIX_REDIRECTOR_PORT", "47200"))
 LISTEN_HOST = os.environ.get("SYNIX_REDIRECTOR_HOST", "0.0.0.0")
 HEADER_TIMEOUT = 30  # seconds to read the CONNECT header
 BUF_SIZE = 65536

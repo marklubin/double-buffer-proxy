@@ -58,7 +58,7 @@ synix-proxy report-bug     # open GitHub issue form
 | `SYNIX_SWAP_THRESHOLD` | `0.80` | Mark checkpoint ready to serve at this % |
 | `SYNIX_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `SYNIX_PASSTHROUGH` | `false` | Disable buffer logic (pure proxy mode) |
-| `SYNIX_PROXY_PORT` | `8080` | CONNECT redirector port |
+| `SYNIX_PROXY_PORT` | `47200` | CONNECT redirector port |
 | `SYNIX_DASHBOARD_PORT` | `8443` | Dashboard/proxy port |
 
 ```sh

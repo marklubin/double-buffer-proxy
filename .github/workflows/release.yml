@@ -85,7 +85,7 @@ jobs:
       - name: Smoke test — health endpoint
         run: |
           docker run -d --name smoke \
-            -p 127.0.0.1:8080:8080 -p 127.0.0.1:8443:443 \
+            -p 127.0.0.1:47200:47200 -p 127.0.0.1:8443:443 \
             synix-proxy:test
           for i in $(seq 1 30); do
             if curl -fsk https://localhost:8443/health 2>/dev/null; then
@@ -135,7 +135,7 @@ jobs:
         run: |
           mkdir -p certs data logs
           docker run -d --name dbproxy \
-            -p 127.0.0.1:8080:8080 \
+            -p 127.0.0.1:47200:47200 \
             -p 127.0.0.1:8443:443 \
             -v $PWD/certs:/app/certs \
             -v $PWD/data:/app/data \
@@ -159,7 +159,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           npm install -g @anthropic-ai/claude-code@$VERSION
-          export HTTPS_PROXY=http://127.0.0.1:8080
+          export HTTPS_PROXY=http://127.0.0.1:47200
           export NODE_EXTRA_CA_CERTS=$PWD/certs/ca.pem
           # Single non-interactive request through the proxy
           claude -p "Say 'proxy test ok' and nothing else." --output-format text \
@@ -170,7 +170,7 @@ jobs:
       - name: E2E lifecycle test
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PROXY_PORT: "8080"
+          PROXY_PORT: "47200"
           DASHBOARD_PORT: "8443"
           CA_CERT: "certs/ca.pem"
           MAX_ROUNDS: "30"
