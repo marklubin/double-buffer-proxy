@@ -214,7 +214,7 @@ case "${1:-}" in
         echo "https://localhost:${DASHBOARD_PORT}/dashboard"
         exit 0
         ;;
-    update)
+    self-update)
         echo "Updating claude-db-proxy..."
         echo "Stopping container..."
         $RT stop "$CONTAINER_NAME" 2>/dev/null || true
@@ -245,7 +245,7 @@ case "${1:-}" in
         echo "  status       Show proxy status"
         echo "  logs         Tail proxy logs (structured JSON)"
         echo "  dashboard    Print dashboard URL"
-        echo "  update       Update proxy (pulls latest image + wrapper)"
+        echo "  self-update   Update proxy (pulls latest image + wrapper)"
         echo "  uninstall    Stop container and print cleanup instructions"
         echo "  help         Show this help"
         echo ""
