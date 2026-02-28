@@ -19,8 +19,8 @@ log = structlog.get_logger()
 
 REDIRECT_HOST = "api.anthropic.com"
 PROXY_TARGET = ("127.0.0.1", 443)
-LISTEN_PORT = int(os.environ.get("DBPROXY_REDIRECTOR_PORT", "8080"))
-LISTEN_HOST = os.environ.get("DBPROXY_REDIRECTOR_HOST", "0.0.0.0")
+LISTEN_PORT = int(os.environ.get("SYNIX_REDIRECTOR_PORT", "8080"))
+LISTEN_HOST = os.environ.get("SYNIX_REDIRECTOR_HOST", "0.0.0.0")
 HEADER_TIMEOUT = 30  # seconds to read the CONNECT header
 BUF_SIZE = 65536
 
@@ -153,8 +153,8 @@ async def run_redirector(host: str = LISTEN_HOST, port: int = LISTEN_PORT) -> No
 def main() -> None:
     from .logging_config import setup_logging
 
-    log_level = os.environ.get("DBPROXY_LOG_LEVEL", "INFO")
-    log_dir = os.environ.get("DBPROXY_LOG_DIR", "logs")
+    log_level = os.environ.get("SYNIX_LOG_LEVEL", "INFO")
+    log_dir = os.environ.get("SYNIX_LOG_DIR", "logs")
     setup_logging(log_dir, log_level)
     try:
         asyncio.run(run_redirector())

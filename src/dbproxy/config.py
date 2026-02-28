@@ -1,4 +1,4 @@
-"""Proxy configuration via environment variables (DBPROXY_ prefix) or defaults."""
+"""Proxy configuration via environment variables (SYNIX_ prefix) or defaults."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ class ProxyConfig(BaseSettings):
         "claude-haiku-4-5-20251001": 200_000,
     }
 
-    model_config = {"env_prefix": "DBPROXY_"}
+    model_config = {"env_prefix": "SYNIX_"}
 
     def context_window_for(self, model: str) -> int:
         """Return the context window size for the given model, defaulting to 200k."""

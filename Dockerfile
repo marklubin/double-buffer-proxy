@@ -37,13 +37,13 @@ RUN chmod +x /app/docker-entrypoint.sh
 RUN mkdir -p /app/certs /app/data /app/logs
 
 ENV PATH="/app/.venv/bin:$PATH"
-ENV DBPROXY_HOST=0.0.0.0
-ENV DBPROXY_TLS_CA_DIR=/app/certs
-ENV DBPROXY_DB_PATH=/app/data/dbproxy.sqlite
-ENV DBPROXY_LOG_DIR=/app/logs
+ENV SYNIX_HOST=0.0.0.0
+ENV SYNIX_TLS_CA_DIR=/app/certs
+ENV SYNIX_DB_PATH=/app/data/dbproxy.sqlite
+ENV SYNIX_LOG_DIR=/app/logs
 
-LABEL org.opencontainers.image.title="Claude DB Proxy" \
-      org.opencontainers.image.description="Double-buffer context window proxy for Claude Code" \
+LABEL org.opencontainers.image.title="Synix Claude Proxy" \
+      org.opencontainers.image.description="Pre-computes conversation summaries so Claude Code compaction is instant" \
       org.opencontainers.image.version="${VERSION}"
 
 EXPOSE 443 8080

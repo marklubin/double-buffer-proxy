@@ -15,18 +15,18 @@
   <text x="100" y="96" class="label" text-anchor="middle">Claude Code</text>
   <text x="100" y="114" class="sublabel" text-anchor="middle">claude cli</text>
 
-  <!-- Arrow: Claude → Proxy -->
+  <!-- Arrow: Claude → Claude Proxy -->
   <line x1="170" y1="100" x2="230" y2="100" stroke="#e8723a" stroke-width="2"/>
   <polygon points="230,100 222,94 222,106" fill="#e8723a"/>
 
-  <!-- Proxy box -->
+  <!-- Claude Proxy box -->
   <rect x="236" y="44" width="160" height="112" class="box" fill="#fff5f0" stroke="#e8723a"/>
-  <text x="316" y="82" class="label" text-anchor="middle" fill="#d4543a">Double Buffer</text>
-  <text x="316" y="100" class="label" text-anchor="middle" fill="#d4543a">Proxy</text>
+  <text x="316" y="82" class="label" text-anchor="middle" fill="#d4543a">Synix</text>
+  <text x="316" y="100" class="label" text-anchor="middle" fill="#d4543a">Claude Proxy</text>
   <text x="316" y="122" class="sublabel" text-anchor="middle">checkpoints context</text>
   <text x="316" y="136" class="sublabel" text-anchor="middle">in background</text>
 
-  <!-- Arrow: Proxy → API -->
+  <!-- Arrow: Claude Proxy → API -->
   <line x1="396" y1="100" x2="564" y2="100" stroke="#333" stroke-width="2"/>
   <polygon points="564,100 556,94 556,106" fill="#333"/>
   <text x="480" y="90" class="sublabel" text-anchor="middle">HTTPS</text>

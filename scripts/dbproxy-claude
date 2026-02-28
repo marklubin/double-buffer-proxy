@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Launch Claude Code through the double-buffer proxy (development version).
-# For the installed version, use: claude-db-proxy
+# Launch Claude Code through the Synix proxy (development version).
+# For the installed version, use: synix
 #
 # This script uses docker-compose from the repo directory.
 # For production use, install via: curl -fsSL .../install.sh | sh
@@ -8,8 +8,8 @@ set -euo pipefail
 
 COMPOSE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CA_CERT="$COMPOSE_DIR/certs/ca.pem"
-DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
-PROXY_PORT="${DBPROXY_PROXY_PORT:-8080}"
+DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+PROXY_PORT="${SYNIX_PROXY_PORT:-8080}"
 
 # Detect container runtime
 if command -v podman >/dev/null 2>&1; then
@@ -23,7 +23,7 @@ fi
 
 # Ensure container is running
 if ! $COMPOSE -f "$COMPOSE_DIR/docker-compose.yml" ps --status running 2>/dev/null | grep -q dbproxy; then
-    echo "Starting double-buffer-proxy container..."
+    echo "Starting synix proxy container..."
     $COMPOSE -f "$COMPOSE_DIR/docker-compose.yml" up -d --build
 
     printf "Waiting for proxy to be healthy"
@@ -45,8 +45,8 @@ if [ ! -f "$CA_CERT" ]; then
 fi
 
 # Launch Claude
-printf '\033[0;36mDB Proxy: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
+printf '\033[0;36mSynix: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
 export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
 export NODE_EXTRA_CA_CERTS="$CA_CERT"
-export DBPROXY_ACTIVE=1
+export SYNIX_ACTIVE=1
 exec claude "$@"

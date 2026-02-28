@@ -10,7 +10,7 @@ from .logging_config import setup_logging
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Double Buffer Proxy for Claude Code")
+    parser = argparse.ArgumentParser(description="Synix Claude Proxy")
     parser.add_argument("--host", default=None, help="Bind host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=None, help="Bind port (default: 443)")
     parser.add_argument("--passthrough", action="store_true", help="Passthrough mode (no buffer logic)")
@@ -62,7 +62,7 @@ def _setup_hosts() -> None:
         return
 
     with open(hosts_path, "a") as f:
-        f.write(f"\n# Double Buffer Proxy\n{hosts_line}\n")
+        f.write(f"\n# Synix Claude Proxy\n{hosts_line}\n")
     print(f"Added '{hosts_line}' to {hosts_path}")
 
 

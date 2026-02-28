@@ -5,7 +5,7 @@ Drives a conversation through:
   Cycle 1: IDLE → checkpoint → WAL_ACTIVE → (Claude compacts) → swap → IDLE
   Cycle 2: IDLE → checkpoint → WAL_ACTIVE → (Claude compacts) → swap → IDLE
 
-The proxy pre-computes checkpoints at DBPROXY_CHECKPOINT_THRESHOLD (default 25%).
+The proxy pre-computes checkpoints at SYNIX_CHECKPOINT_THRESHOLD (default 25%).
 Claude Code triggers compaction at CLAUDE_AUTOCOMPACT_PCT_OVERRIDE (default 35%).
 The proxy intercepts the compact request and returns the pre-computed checkpoint.
 
@@ -31,7 +31,7 @@ DASHBOARD_HOST = os.environ.get("E2E_DASHBOARD_HOST", "127.0.0.1")
 DASHBOARD_PORT = int(os.environ.get("E2E_DASHBOARD_PORT", "8443"))
 TMUX_SESSION = os.environ.get("E2E_TMUX_SESSION", "ct")
 LOG_FILE = os.environ.get("E2E_LOG_FILE", os.path.expanduser(
-    "~/.local/share/claude-db-proxy/logs/dbproxy.jsonl"
+    "~/.local/share/synix/logs/dbproxy.jsonl"
 ))
 # Fallback to old location if new one doesn't exist
 if not os.path.exists(LOG_FILE):
@@ -211,7 +211,7 @@ def get_prompt(idx: int) -> str:
 
 def run() -> None:
     log("=" * 60)
-    log("Double-Buffer Proxy: 2-Cycle Verification")
+    log("Synix: 2-Cycle Verification")
     log("  Architecture: Client-driven compaction")
     log("  Proxy pre-computes checkpoints, Claude Code drives compact")
     log(f"  Log file: {LOG_FILE}")

@@ -9,8 +9,8 @@ services:
       - ./data:/app/data         # SQLite persistence
       - ./logs:/app/logs         # Log files
     environment:
-      - DBPROXY_HOST=0.0.0.0
-      - DBPROXY_LOG_LEVEL=${DBPROXY_LOG_LEVEL:-INFO}
-      - DBPROXY_CHECKPOINT_THRESHOLD=${DBPROXY_CHECKPOINT_THRESHOLD:-}
-      - DBPROXY_SWAP_THRESHOLD=${DBPROXY_SWAP_THRESHOLD:-}
+      - SYNIX_HOST=0.0.0.0
+      - SYNIX_LOG_LEVEL=${SYNIX_LOG_LEVEL:-INFO}
+      - SYNIX_CHECKPOINT_THRESHOLD=${SYNIX_CHECKPOINT_THRESHOLD:-}
+      - SYNIX_SWAP_THRESHOLD=${SYNIX_SWAP_THRESHOLD:-}
     restart: unless-stopped

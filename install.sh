@@ -1,19 +1,19 @@
 #!/usr/bin/env sh
-# Claude DB Proxy — Installer
+# Synix Claude Proxy — Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
 #
-# Installs the double-buffer context window proxy for Claude Code.
+# Installs the Synix context window proxy for Claude Code.
 # Supports Docker and Podman. Installs to ~/.local/ (XDG-compliant).
 set -eu
 
 # ── Configuration ────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/marklubin/double-buffer-proxy"
 IMAGE_REGISTRY="ghcr.io/marklubin"
-IMAGE_NAME="claude-db-proxy"
-CONTAINER_NAME="claude-db-proxy"
+IMAGE_NAME="synix"
+CONTAINER_NAME="synix"
 
 INSTALL_DIR="${HOME}/.local/bin"
-DATA_DIR="${HOME}/.local/share/claude-db-proxy"
+DATA_DIR="${HOME}/.local/share/synix"
 CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -25,8 +25,8 @@ ok()    { printf '\033[1;32m==> %s\033[0m\n' "$*"; }
 # ── Banner ───────────────────────────────────────────────────────────────────
 banner() {
     printf '\n'
-    printf '\033[1m  Claude DB Proxy — Installer\033[0m\n'
-    printf '  Double-buffer context window management for Claude Code\n'
+    printf '\033[1m  Synix — Installer\033[0m\n'
+    printf '  Pre-computes conversation summaries so Claude Code compaction is instant\n'
     printf '\n'
 }
 
@@ -148,20 +148,20 @@ generate_certs() {
 
 # ── Install wrapper script ──────────────────────────────────────────────────
 install_wrapper() {
-    WRAPPER="$INSTALL_DIR/claude-db-proxy"
-    log "Installing claude-db-proxy to $WRAPPER..."
+    WRAPPER="$INSTALL_DIR/synix"
+    log "Installing synix to $WRAPPER..."
 
     cat > "$WRAPPER" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
-# claude-db-proxy — Launch Claude Code through the double-buffer proxy.
+# synix — Launch Claude Code through the Synix proxy.
 # https://github.com/marklubin/double-buffer-proxy
 set -euo pipefail
 
-DATA_DIR="${DBPROXY_DATA_DIR:-$HOME/.local/share/claude-db-proxy}"
-CONTAINER_NAME="claude-db-proxy"
-PROXY_PORT="${DBPROXY_PROXY_PORT:-8080}"
-DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
-LOG_LEVEL="${DBPROXY_LOG_LEVEL:-INFO}"
+DATA_DIR="${SYNIX_DATA_DIR:-$HOME/.local/share/synix}"
+CONTAINER_NAME="synix"
+PROXY_PORT="${SYNIX_PROXY_PORT:-8080}"
+DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
 # ── Detect container runtime ────────────────────────────────────────────
 RT=""
@@ -215,7 +215,7 @@ case "${1:-}" in
         exit 0
         ;;
     proxy-update)
-        echo "Updating claude-db-proxy..."
+        echo "Updating Synix..."
         echo "Stopping container..."
         $RT stop "$CONTAINER_NAME" 2>/dev/null || true
         $RT rm "$CONTAINER_NAME" 2>/dev/null || true
@@ -231,12 +231,12 @@ case "${1:-}" in
         echo "To complete uninstall, remove:"
         echo "  rm $0"
         echo "  rm -rf $DATA_DIR"
-        echo "  # Remove 'alias claude=claude-db-proxy' from your shell config"
+        echo "  # Remove 'alias claude=synix' from your shell config"
         echo "  # Remove statusLine from ~/.claude/settings.json"
         exit 0
         ;;
     proxy-help)
-        echo "Usage: claude-db-proxy [command] [claude args...]"
+        echo "Usage: synix [command] [claude args...]"
         echo ""
         echo "Commands:"
         echo "  (default)     Start proxy (if needed) and launch Claude Code"
@@ -252,11 +252,11 @@ case "${1:-}" in
         echo "All other arguments are passed through to claude."
         echo ""
         echo "Environment:"
-        echo "  DBPROXY_LOG_LEVEL          Log level (default: INFO)"
-        echo "  DBPROXY_PROXY_PORT         Redirector port (default: 8080)"
-        echo "  DBPROXY_DASHBOARD_PORT     Dashboard port (default: 8443)"
-        echo "  DBPROXY_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 70)"
-        echo "  DBPROXY_SWAP_THRESHOLD     Swap at N% context (default: 80)"
+        echo "  SYNIX_LOG_LEVEL          Log level (default: INFO)"
+        echo "  SYNIX_PROXY_PORT         Redirector port (default: 8080)"
+        echo "  SYNIX_DASHBOARD_PORT     Dashboard port (default: 8443)"
+        echo "  SYNIX_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 70)"
+        echo "  SYNIX_SWAP_THRESHOLD     Swap at N% context (default: 80)"
         echo ""
         echo "Logs: $DATA_DIR/logs/dbproxy.jsonl"
         echo "Dashboard: https://localhost:${DASHBOARD_PORT}/dashboard"
@@ -266,7 +266,7 @@ esac
 
 # ── Resolve image ───────────────────────────────────────────────────────
 IMAGE_REF=""
-for candidate in "ghcr.io/marklubin/claude-db-proxy:latest" "claude-db-proxy:latest"; do
+for candidate in "ghcr.io/marklubin/synix:latest" "synix:latest"; do
     if $RT image exists "$candidate" 2>/dev/null || $RT inspect "$candidate" >/dev/null 2>&1; then
         IMAGE_REF="$candidate"
         break
@@ -274,7 +274,7 @@ for candidate in "ghcr.io/marklubin/claude-db-proxy:latest" "claude-db-proxy:lat
 done
 if [ -z "$IMAGE_REF" ]; then
     echo "Image not found locally. Pulling..." >&2
-    IMAGE_REF="ghcr.io/marklubin/claude-db-proxy:latest"
+    IMAGE_REF="ghcr.io/marklubin/synix:latest"
     $RT pull "$IMAGE_REF"
 fi
 
@@ -283,7 +283,7 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
     # Clean up stopped container with same name
     $RT rm "$CONTAINER_NAME" 2>/dev/null || true
 
-    echo "Starting double-buffer proxy..."
+    echo "Starting Synix proxy..."
     $RT run -d \
         --name "$CONTAINER_NAME" \
         -p "127.0.0.1:${PROXY_PORT}:8080" \
@@ -291,10 +291,10 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
         -v "$DATA_DIR/certs:/app/certs" \
         -v "$DATA_DIR/data:/app/data" \
         -v "$DATA_DIR/logs:/app/logs" \
-        -e "DBPROXY_HOST=0.0.0.0" \
-        -e "DBPROXY_LOG_LEVEL=${LOG_LEVEL}" \
-        -e "DBPROXY_CHECKPOINT_THRESHOLD=${DBPROXY_CHECKPOINT_THRESHOLD:-}" \
-        -e "DBPROXY_SWAP_THRESHOLD=${DBPROXY_SWAP_THRESHOLD:-}" \
+        -e "SYNIX_HOST=0.0.0.0" \
+        -e "SYNIX_LOG_LEVEL=${LOG_LEVEL}" \
+        -e "SYNIX_CHECKPOINT_THRESHOLD=${SYNIX_CHECKPOINT_THRESHOLD:-}" \
+        -e "SYNIX_SWAP_THRESHOLD=${SYNIX_SWAP_THRESHOLD:-}" \
         --restart unless-stopped \
         "$IMAGE_REF" >/dev/null
 
@@ -326,12 +326,12 @@ fi
 # ── Launch Claude ──────────────────────────────────────────────────────
 export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
 export NODE_EXTRA_CA_CERTS="$CA_CERT"
-export DBPROXY_ACTIVE=1
+export SYNIX_ACTIVE=1
 export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
 
 # Only print status if stdout is a terminal
 if [ -t 1 ]; then
-    printf '\033[0;36mDB Proxy: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
+    printf '\033[0;36mSynix: ON | Dashboard: https://localhost:%s/dashboard\033[0m\n' "$DASHBOARD_PORT"
 fi
 
 exec claude "$@"
@@ -349,11 +349,11 @@ configure_statusline() {
     STATUSLINE_SCRIPT="$DATA_DIR/statusline.sh"
     cat > "$STATUSLINE_SCRIPT" << 'SL_EOF'
 #!/bin/sh
-# Claude DB Proxy statusline helper
+# Synix statusline helper
 # Reads JSON from stdin (required by Claude Code), outputs status text.
 cat > /dev/null
-if [ -n "${DBPROXY_ACTIVE:-}" ]; then
-    printf 'DB_PROXY_ON'
+if [ -n "${SYNIX_ACTIVE:-}" ]; then
+    printf 'SYNIX_ON'
 fi
 SL_EOF
     chmod +x "$STATUSLINE_SCRIPT"
@@ -384,8 +384,8 @@ with open('$CLAUDE_SETTINGS', 'w') as f:
             ok "Status line configured in $CLAUDE_SETTINGS"
         else
             warn "statusLine already configured in $CLAUDE_SETTINGS."
-            printf '  To add DB_PROXY_ON manually, append to your statusLine command:\n'
-            printf '  ; [ -n "\$DBPROXY_ACTIVE" ] && printf " | DB_PROXY_ON"\n\n'
+            printf '  To add SYNIX_ON manually, append to your statusLine command:\n'
+            printf '  ; [ -n "\$SYNIX_ACTIVE" ] && printf " | SYNIX_ON"\n\n'
         fi
     else
         # Create settings.json
@@ -414,9 +414,9 @@ detect_shell_config() {
 
 # ── Smoke test — start container and verify health ───────────────────────────
 smoke_test() {
-    PROXY_PORT="${DBPROXY_PROXY_PORT:-8080}"
-    DASHBOARD_PORT="${DBPROXY_DASHBOARD_PORT:-8443}"
-    LOG_LEVEL="${DBPROXY_LOG_LEVEL:-INFO}"
+    PROXY_PORT="${SYNIX_PROXY_PORT:-8080}"
+    DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-8443}"
+    LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
     log "Starting proxy container..."
 
@@ -430,8 +430,8 @@ smoke_test() {
         -v "$DATA_DIR/certs:/app/certs" \
         -v "$DATA_DIR/data:/app/data" \
         -v "$DATA_DIR/logs:/app/logs" \
-        -e "DBPROXY_HOST=0.0.0.0" \
-        -e "DBPROXY_LOG_LEVEL=${LOG_LEVEL}" \
+        -e "SYNIX_HOST=0.0.0.0" \
+        -e "SYNIX_LOG_LEVEL=${LOG_LEVEL}" \
         --restart unless-stopped \
         "$IMAGE_REF" >/dev/null
 
@@ -481,17 +481,17 @@ print_next_steps() {
 
     printf '  2. Add this alias so "claude" always uses the proxy:\n'
     if [ "$SHELL_NAME" = "fish" ]; then
-        printf '     \033[1;33malias claude "claude-db-proxy"\033[0m  # add to %s\n\n' "$SHELL_RC"
+        printf '     \033[1;33malias claude "synix"\033[0m  # add to %s\n\n' "$SHELL_RC"
     else
-        printf '     \033[1;33malias claude="claude-db-proxy"\033[0m  # add to %s\n\n' "$SHELL_RC"
+        printf '     \033[1;33malias claude="synix"\033[0m  # add to %s\n\n' "$SHELL_RC"
     fi
 
     printf '  3. Start using it:\n'
-    printf '     \033[1mclaude-db-proxy\033[0m           # launch Claude through proxy\n'
-    printf '     \033[1mclaude-db-proxy status\033[0m    # check proxy status\n'
-    printf '     \033[1mclaude-db-proxy logs\033[0m      # view proxy logs\n'
-    printf '     \033[1mclaude-db-proxy dashboard\033[0m # print dashboard URL\n'
-    printf '     \033[1mclaude-db-proxy stop\033[0m      # stop the proxy\n'
+    printf '     \033[1msynix\033[0m           # launch Claude through proxy\n'
+    printf '     \033[1msynix status\033[0m    # check proxy status\n'
+    printf '     \033[1msynix logs\033[0m      # view proxy logs\n'
+    printf '     \033[1msynix dashboard\033[0m # print dashboard URL\n'
+    printf '     \033[1msynix stop\033[0m      # stop the proxy\n'
     printf '\n'
     printf '  Logs:      %s/logs/dbproxy.jsonl\n' "$DATA_DIR"
     printf '  Dashboard: https://localhost:8443/dashboard\n'

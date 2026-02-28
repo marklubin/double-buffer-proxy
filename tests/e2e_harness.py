@@ -2,14 +2,14 @@
 """VM E2E harness: orchestrates a real Claude Code session through the proxy.
 
 Sends messages to Claude Code via tmux, polls proxy logs for phase
-transitions, and verifies the double-buffer lifecycle.
+transitions, and verifies the Synix compaction lifecycle.
 
 Usage (from inside the VM):
     cd ~/double-buffer-proxy && uv run python tests/e2e_harness.py
 
 Prerequisites:
     - Proxy running on port 443:
-        sudo -E DBPROXY_HOST=0.0.0.0 ~/.local/bin/uv run -m dbproxy --log-level DEBUG
+        sudo -E SYNIX_HOST=0.0.0.0 ~/.local/bin/uv run -m dbproxy --log-level DEBUG
     - Claude Code running in tmux session 'ct'
     - /etc/hosts: 127.0.0.1 api.anthropic.com
     - NODE_EXTRA_CA_CERTS set in the tmux session
@@ -19,7 +19,7 @@ Note on thresholds:
     the conversation must accumulate at least 50k input tokens before a
     checkpoint can succeed. Recommended proxy config for testing:
 
-        DBPROXY_CHECKPOINT_THRESHOLD=0.25 DBPROXY_SWAP_THRESHOLD=0.26
+        SYNIX_CHECKPOINT_THRESHOLD=0.25 SYNIX_SWAP_THRESHOLD=0.26
 
     This triggers checkpoint at 50k tokens (25% of 200k) and swap at 52k.
     Claude Code's system prompt + tools ≈ 19k base tokens, so reaching
@@ -173,7 +173,7 @@ def wait_idle(timeout: float = 120) -> bool:
 
 def run() -> None:
     log("=" * 50)
-    log("Double-Buffer Proxy E2E Harness")
+    log("Synix E2E Harness")
     log("=" * 50)
 
     # Preflight

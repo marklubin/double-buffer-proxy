@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.svg" alt="double buffer proxy" width="420"/>
+  <img src="docs/logo.svg" alt="synix" width="420"/>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/
 
 ```sh
 # Add to ~/.zshrc or ~/.bashrc
-alias claude="claude-db-proxy"
+alias claude="synix"
 ```
 
 That's it. Run `claude` as normal.
@@ -22,14 +22,14 @@ That's it. Run `claude` as normal.
 ## What It Does
 
 <p align="center">
-  <img src="docs/diagram.svg" alt="Claude Code → Double Buffer Proxy → Anthropic API" width="680"/>
+  <img src="docs/diagram.svg" alt="Claude Code → Synix → Anthropic API" width="680"/>
 </p>
 
 A local proxy that sits between Claude Code and the Anthropic API on your machine. It pre-computes a conversation checkpoint at 70% context utilization. When Claude auto-compacts at 80%, the proxy returns the checkpoint instantly — no API call, no wait.
 
 **Runs entirely on your machine.** No third-party servers, no data leaves your network. The proxy runs in a local Docker/Podman container and only communicates with `api.anthropic.com` — the same endpoint Claude Code already talks to. Your API keys and conversation data never touch anything else.
 
-![Claude Code with DB_PROXY_ON status](docs/claude.png)
+![Claude Code with SYNIX_ON status](docs/claude.png)
 
 ## Dashboard
 
@@ -43,25 +43,25 @@ Real-time monitoring of all active conversations at `https://localhost:8443/dash
 claude                     # start proxy + launch Claude Code
 claude proxy-help          # proxy-specific help
 claude proxy-update        # update proxy image + wrapper
-claude-db-proxy status     # check if proxy is running
-claude-db-proxy stop       # stop the proxy container
-claude-db-proxy logs       # tail structured JSON logs
-claude-db-proxy dashboard  # print dashboard URL
+synix status               # check if proxy is running
+synix stop                 # stop the proxy container
+synix logs                 # tail structured JSON logs
+synix dashboard            # print dashboard URL
 ```
 
 ## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DBPROXY_CHECKPOINT_THRESHOLD` | `0.70` | Pre-compute checkpoint at this % of context window |
-| `DBPROXY_SWAP_THRESHOLD` | `0.80` | Mark checkpoint ready to serve at this % |
-| `DBPROXY_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `DBPROXY_PASSTHROUGH` | `false` | Disable buffer logic (pure proxy mode) |
-| `DBPROXY_PROXY_PORT` | `8080` | CONNECT redirector port |
-| `DBPROXY_DASHBOARD_PORT` | `8443` | Dashboard/proxy port |
+| `SYNIX_CHECKPOINT_THRESHOLD` | `0.70` | Pre-compute checkpoint at this % of context window |
+| `SYNIX_SWAP_THRESHOLD` | `0.80` | Mark checkpoint ready to serve at this % |
+| `SYNIX_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `SYNIX_PASSTHROUGH` | `false` | Disable buffer logic (pure proxy mode) |
+| `SYNIX_PROXY_PORT` | `8080` | CONNECT redirector port |
+| `SYNIX_DASHBOARD_PORT` | `8443` | Dashboard/proxy port |
 
 ```sh
-DBPROXY_CHECKPOINT_THRESHOLD=0.60 claude-db-proxy
+SYNIX_CHECKPOINT_THRESHOLD=0.60 synix
 ```
 
 ## How It Works
@@ -102,5 +102,5 @@ docker compose build && docker compose up -d  # container
 ## Uninstall
 
 ```sh
-claude-db-proxy uninstall
+synix uninstall
 ```
