@@ -160,6 +160,7 @@ class TestSwapWalStitching:
         result = await mgr.execute_swap(stream=False)
         content = result["content"][0]["text"]
         assert "Summary of early conversation." in content
+        assert "<context_summary>" in content
         assert "<recent_activity>" in content
         assert "new msg after checkpoint" in content
         assert "new reply after checkpoint" in content
@@ -178,7 +179,8 @@ class TestSwapWalStitching:
 
         result = await mgr.execute_swap(stream=False)
         content = result["content"][0]["text"]
-        assert content == "Summary of early conversation."
+        assert "Summary of early conversation." in content
+        assert "<context_summary>" in content
         assert "<recent_activity>" not in content
 
     @pytest.mark.asyncio
@@ -192,7 +194,8 @@ class TestSwapWalStitching:
 
         result = await mgr.execute_swap(stream=False)
         content = result["content"][0]["text"]
-        assert content == "Summary of early conversation."
+        assert "Summary of early conversation." in content
+        assert "<context_summary>" in content
         assert "<recent_activity>" not in content
 
     @pytest.mark.asyncio
@@ -204,7 +207,7 @@ class TestSwapWalStitching:
 
         result = await mgr.execute_swap(stream=False)
         content = result["content"][0]["text"]
-        assert content == "Summary of early conversation."
+        assert "Summary of early conversation." in content
 
     @pytest.mark.asyncio
     async def test_swap_anchor_beyond_messages(self):

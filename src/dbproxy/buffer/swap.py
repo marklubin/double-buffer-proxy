@@ -71,18 +71,31 @@ def format_compaction_with_wal(
 
     Returns the full compaction content string that includes both
     the checkpoint summary and recent activity from the WAL.
+
+    A framing note is prepended so that when this summary appears as
+    the assistant's first message in the next request, the model knows
+    to respond normally to the user's subsequent message rather than
+    continuing to summarize.
     """
-    if not wal_messages:
-        return checkpoint_content
+    parts: list[str] = [
+        "<context_summary>",
+        "This is a summary of the conversation so far. "
+        "All prior context has been incorporated below. "
+        "Respond normally to the user's next message.",
+        "",
+        checkpoint_content,
+    ]
 
-    serialized = "\n\n".join(_serialize_message(msg) for msg in wal_messages)
+    if wal_messages:
+        serialized = "\n\n".join(_serialize_message(msg) for msg in wal_messages)
+        parts.append("")
+        parts.append("<recent_activity>")
+        parts.append(serialized)
+        parts.append("</recent_activity>")
 
-    return (
-        f"{checkpoint_content}\n\n"
-        f"<recent_activity>\n"
-        f"{serialized}\n"
-        f"</recent_activity>"
-    )
+    parts.append("</context_summary>")
+
+    return "\n".join(parts)
 
 
 def build_swap_response(

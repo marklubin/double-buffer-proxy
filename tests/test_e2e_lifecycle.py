@@ -279,7 +279,8 @@ class TestFullLifecycle:
         assert data["content"][0]["type"] == "text"
         compaction_content = data["content"][0]["text"]
 
-        # Compaction includes checkpoint summary
+        # Compaction includes framing and checkpoint summary
+        assert "<context_summary>" in compaction_content
         assert "This is the checkpoint summary." in compaction_content
         # Compaction includes WAL (messages after anchor)
         assert "<recent_activity>" in compaction_content

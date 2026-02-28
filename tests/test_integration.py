@@ -240,7 +240,7 @@ class TestClientCompactExecution:
         data = await resp.json()
         assert data["stop_reason"] == "end_turn"
         assert data["content"][0]["type"] == "text"
-        assert data["content"][0]["text"] == "This is the checkpoint summary"
+        assert "This is the checkpoint summary" in data["content"][0]["text"]
 
         # Manager should be back to IDLE
         assert mgr.phase == BufferPhase.IDLE

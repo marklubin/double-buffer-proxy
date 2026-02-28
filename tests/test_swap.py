@@ -70,7 +70,12 @@ class TestSerializeMessage:
 
 class TestFormatCompactionWithWal:
     def test_no_wal(self):
-        assert format_compaction_with_wal("summary", []) == "summary"
+        result = format_compaction_with_wal("summary", [])
+        assert "<context_summary>" in result
+        assert "summary" in result
+        assert "Respond normally" in result
+        assert "</context_summary>" in result
+        assert "<recent_activity>" not in result
 
     def test_with_wal(self):
         wal = [
@@ -78,10 +83,12 @@ class TestFormatCompactionWithWal:
             {"role": "assistant", "content": "4"},
         ]
         result = format_compaction_with_wal("summary", wal)
-        assert result.startswith("summary\n\n<recent_activity>")
+        assert "<context_summary>" in result
+        assert "summary" in result
+        assert "<recent_activity>" in result
         assert "[user]\nwhat is 2+2?" in result
         assert "[assistant]\n4" in result
-        assert result.endswith("</recent_activity>")
+        assert result.endswith("</context_summary>")
 
     def test_multiple_messages(self):
         wal = [
@@ -99,7 +106,7 @@ class TestBuildSwapResponse:
         result = build_swap_response("summary", "claude-sonnet-4-6", stream=False)
         assert isinstance(result, dict)
         assert result["stop_reason"] == "end_turn"
-        assert result["content"][0]["text"] == "summary"
+        assert "summary" in result["content"][0]["text"]
         assert result["content"][0]["type"] == "text"
 
     def test_streaming(self):
