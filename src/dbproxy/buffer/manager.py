@@ -450,37 +450,40 @@ class BufferManager:
         anchor = self.checkpoint_anchor_index
 
         def summarize_msg(msg: dict[str, Any]) -> dict[str, Any]:
-            """Summarize a message for the dashboard."""
+            """Extract full message text for dashboard display."""
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
             if isinstance(content, str):
-                preview = content[:300]
+                preview = content
             elif isinstance(content, list):
                 parts: list[str] = []
                 for block in content:
                     if isinstance(block, str):
-                        parts.append(block[:100])
+                        parts.append(block)
                     elif isinstance(block, dict):
                         btype = block.get("type", "unknown")
                         if btype == "text":
-                            parts.append(block.get("text", "")[:200])
+                            parts.append(block.get("text", ""))
                         elif btype == "tool_use":
-                            parts.append(f"[tool_use: {block.get('name', '?')}]")
+                            name = block.get("name", "?")
+                            inp = block.get("input", {})
+                            inp_str = json.dumps(inp, indent=2) if isinstance(inp, dict) else str(inp)
+                            parts.append(f"[tool_use: {name}]\n{inp_str}")
                         elif btype == "tool_result":
                             rc = block.get("content", "")
                             if isinstance(rc, list):
-                                rc = " ".join(
-                                    b.get("text", "")[:100]
+                                rc = "\n".join(
+                                    b.get("text", "")
                                     for b in rc if isinstance(b, dict)
                                 )
-                            parts.append(f"[tool_result: {str(rc)[:200]}]")
+                            parts.append(f"[tool_result]\n{str(rc)}")
                         elif btype == "compaction":
-                            parts.append("[compaction]")
+                            parts.append(f"[compaction]\n{block.get('content', '')}")
                         else:
                             parts.append(f"[{btype}]")
                 preview = "\n".join(parts)
             else:
-                preview = str(content)[:300]
+                preview = str(content)
             return {"role": role, "preview": preview}
 
         messages = [summarize_msg(m) for m in self._all_messages]
@@ -490,7 +493,7 @@ class BufferManager:
         visible_checkpoint = self.checkpoint_content or self.last_checkpoint_content
         result.update({
             "messages": messages,
-            "checkpoint_content": (visible_checkpoint or "")[:2000],
+            "checkpoint_content": visible_checkpoint or "",
             "wal_start_index": anchor,
         })
         return result
