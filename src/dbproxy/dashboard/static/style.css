@@ -119,6 +119,10 @@ main { padding: 1.25rem 2rem; max-width: 1200px; margin: 0 auto; }
 .btn-msg-toggle { background: none; border: none; color: var(--accent-blue); cursor: pointer; font-size: 0.65rem; font-family: inherit; padding: 0.2rem 0; margin-top: 0.2rem; }
 .btn-msg-toggle:hover { text-decoration: underline; }
 
+/* Previous swap cycle */
+.last-swap-section { opacity: 0.6; border-top: 1px dashed var(--border); padding-top: 0.75rem; }
+.last-swap-section:hover { opacity: 1; }
+
 /* Footer */
 .dashboard-footer { text-align: center; padding: 1.5rem 0 1rem; font-size: 0.7rem; color: var(--text-muted); }
 .dashboard-footer a { color: var(--accent-blue); text-decoration: none; }

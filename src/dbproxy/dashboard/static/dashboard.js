@@ -162,52 +162,48 @@ function toggleExpand(id) {
     }
 }
 
+/** Render a list of messages as expandable blocks. */
+function buildMessageList(messages, anchor, idPrefix) {
+    if (!messages || messages.length === 0) {
+        return '<div class="detail-empty">No messages captured yet</div>';
+    }
+    window._msgData = window._msgData || {};
+    return messages.map((m, i) => {
+        const isWal = anchor != null && i >= anchor;
+        const zone = isWal ? 'msg-wal' : '';
+        const roleClass = m.role === 'user' ? 'role-user' : m.role === 'assistant' ? 'role-assistant' : 'role-other';
+        const walTag = isWal ? '<span class="msg-wal-tag">WAL</span>' : '';
+        const msgId = `${idPrefix}-${i}`;
+        const text = m.preview || '';
+        const lines = text.split('\n');
+        const needsExpand = lines.length > 5 || text.length > 400;
+        window._msgData[msgId] = text;
+        let contentHtml;
+        if (!needsExpand) {
+            contentHtml = `<div class="msg-content">${escapeHtml(text)}</div>`;
+        } else {
+            const preview = lines.slice(0, 5).join('\n');
+            contentHtml = `<div class="msg-content msg-collapsed" id="${msgId}">${escapeHtml(preview)}…</div>
+                <button class="btn-msg-toggle" id="${msgId}-btn" onclick="toggleMsgBlock('${msgId}')">show more</button>`;
+        }
+        return `<div class="msg-block ${zone}">
+            <div class="msg-header">
+                <span class="msg-index">#${i}</span>
+                <span class="msg-role ${roleClass}">${m.role}</span>
+                ${walTag}
+            </div>
+            ${contentHtml}
+        </div>`;
+    }).join('');
+}
+
 function renderDetail(data) {
     const panel = document.getElementById('detail-panel');
     const anchor = data.wal_start_index;
     const hasCheckpoint = data.checkpoint_content && data.checkpoint_content.length > 0;
     const shortModel = data.model.replace('claude-', '').replace(/-\d{8}$/, '');
 
-    // Messages — each is a readable block with ~5 lines + expander
-    let msgsHtml = '';
-    if (data.messages && data.messages.length > 0) {
-        msgsHtml = data.messages.map((m, i) => {
-            const isWal = anchor != null && i >= anchor;
-            const zone = anchor != null ? (isWal ? 'msg-wal' : '') : '';
-            const roleClass = m.role === 'user' ? 'role-user' : m.role === 'assistant' ? 'role-assistant' : 'role-other';
-            const walTag = isWal ? '<span class="msg-wal-tag">WAL</span>' : '';
-            const msgId = `msg-${data.conv_id}-${i}`;
-            const text = m.preview || '';
-            const lines = text.split('\n');
-            const needsExpand = lines.length > 5 || text.length > 400;
-            let contentHtml;
-            if (!needsExpand) {
-                contentHtml = `<div class="msg-content">${escapeHtml(text)}</div>`;
-            } else {
-                const preview = lines.slice(0, 5).join('\n');
-                contentHtml = `<div class="msg-content msg-collapsed" id="${msgId}">${escapeHtml(preview)}…</div>
-                    <button class="btn-msg-toggle" id="${msgId}-btn" onclick="toggleMsgBlock('${msgId}')">show more</button>`;
-            }
-            return `<div class="msg-block ${zone}">
-                <div class="msg-header">
-                    <span class="msg-index">#${i}</span>
-                    <span class="msg-role ${roleClass}">${m.role}</span>
-                    ${walTag}
-                </div>
-                ${contentHtml}
-            </div>`;
-        }).join('');
-    } else {
-        msgsHtml = '<div class="detail-empty">No messages captured yet</div>';
-    }
-
-    // Store full message data for expand/collapse
-    if (data.messages) {
-        window._msgData = window._msgData || {};
-        data.messages.forEach((m, i) => {
-            window._msgData[`msg-${data.conv_id}-${i}`] = m.preview || '';
-        });
-    }
+    const msgsHtml = buildMessageList(data.messages, anchor, `msg-${data.conv_id}`);
 
     // Checkpoint
     let checkpointHtml = '';
@@ -216,6 +212,18 @@ function renderDetail(data) {
             <div class="detail-section">
                 <h3>Checkpoint Summary</h3>
                 ${buildExpandable(data.checkpoint_content, 'ckpt-' + data.conv_id)}
+            </div>`;
+    }
+
+    // Previous swap cycle (shows what was checkpointed vs WAL before last swap)
+    let lastSwapHtml = '';
+    if (data.last_swap) {
+        const ls = data.last_swap;
+        const lsMsgs = buildMessageList(ls.messages, ls.wal_start_index, `swap-${data.conv_id}`);
+        lastSwapHtml = `
+            <div class="detail-section last-swap-section">
+                <h3>Previous Cycle (${ls.messages.length} messages, swapped)</h3>
+                <div class="msg-list">${lsMsgs}</div>
             </div>`;
     }
 
@@ -233,6 +241,7 @@ function renderDetail(data) {
             <h3>Messages (${data.messages.length})</h3>
             <div class="msg-list">${msgsHtml}</div>
         </div>
+        ${lastSwapHtml}
     `;
     panel.style.display = 'block';
 }

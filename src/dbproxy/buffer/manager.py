@@ -48,6 +48,8 @@ class BufferManager:
         self._checkpoint_task: asyncio.Task[str] | None = None
         # Persists after swap for dashboard visibility
         self.last_checkpoint_content: str | None = None
+        self._last_swap_messages: list[dict[str, Any]] = []
+        self._last_swap_anchor: int | None = None
 
         # Latest request metadata for checkpoint calls
         self._auth_headers: dict[str, str] = {}
@@ -347,6 +349,10 @@ class BufferManager:
                 stream=stream,
             )
 
+            # Snapshot pre-swap state for dashboard visibility
+            self._last_swap_messages = list(self._all_messages)
+            self._last_swap_anchor = self.checkpoint_anchor_index
+
             # Reset state
             self.phase = transition(
                 self.phase, BufferPhase.IDLE,
@@ -496,4 +502,12 @@ class BufferManager:
             "checkpoint_content": visible_checkpoint or "",
             "wal_start_index": anchor,
         })
+
+        # Include pre-swap snapshot if available (shows what was checkpointed vs WAL)
+        if self._last_swap_messages:
+            result["last_swap"] = {
+                "messages": [summarize_msg(m) for m in self._last_swap_messages],
+                "wal_start_index": self._last_swap_anchor,
+            }
+
         return result
