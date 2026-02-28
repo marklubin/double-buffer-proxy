@@ -97,10 +97,44 @@ async function loadDetail(key) {
     }
 }
 
-/** Build an expandable content block — shows first ~120px with show/hide toggle. */
+/** Build lifecycle bar: IDLE →70%→ CHECKPOINT → WAL →80%→ SWAP */
+function buildLifecycle(phase, util) {
+    const pct = (util * 100).toFixed(0);
+    const phases = [
+        { id: 'IDLE',          label: 'IDLE' },
+        { id: 'CHECKPOINT',    label: 'CHECKPOINT', threshold: '70%' },
+        { id: 'WAL',           label: 'WAL' },
+        { id: 'SWAP',          label: 'SWAP', threshold: '80%' },
+    ];
+
+    // Map actual phase to lifecycle position
+    const phaseMap = {
+        'IDLE': 'IDLE',
+        'CHECKPOINT_PENDING': 'CHECKPOINT',
+        'CHECKPOINTING': 'CHECKPOINT',
+        'WAL_ACTIVE': 'WAL',
+        'SWAP_READY': 'SWAP',
+        'SWAP_EXECUTING': 'SWAP',
+    };
+    const active = phaseMap[phase] || 'IDLE';
+
+    return `<div class="lifecycle">
+        ${phases.map((p, i) => {
+            const isCurrent = p.id === active;
+            const cls = isCurrent ? 'lc-phase lc-active' : 'lc-phase';
+            const arrow = i < phases.length - 1
+                ? `<span class="lc-arrow">${phases[i+1].threshold ? `<span class="lc-threshold">${phases[i+1].threshold}</span>→` : '→'}</span>`
+                : '';
+            return `<span class="${cls}">${p.label}</span>${arrow}`;
+        }).join('')}
+        <span class="lc-pct">${pct}%</span>
+    </div>`;
+}
+
+/** Build expandable content block — ~5 lines visible, then toggle. */
 function buildExpandable(text, id) {
     const escaped = escapeHtml(text);
-    const needsExpand = text.length > 300;
+    const needsExpand = text.length > 500 || (text.match(/\n/g) || []).length > 5;
     if (!needsExpand) {
         return `<div class="expandable-content expanded">${escaped}</div>`;
     }
@@ -128,54 +162,51 @@ function toggleExpand(id) {
     }
 }
 
-/** Build a message preview with optional expand for long content. */
-function buildMsgPreview(text, msgId) {
-    const maxLen = 200;
-    if (text.length <= maxLen) {
-        return `<span class="msg-preview">${escapeHtml(text)}</span>`;
-    }
-    const short = text.substring(0, maxLen);
-    return `<span class="msg-preview" id="${msgId}">${escapeHtml(short)}…</span>
-        <button class="btn-msg-expand" onclick="toggleMsg('${msgId}', ${JSON.stringify(JSON.stringify(text))})">more</button>`;
-}
-
-function toggleMsg(id, fullJson) {
-    const el = document.getElementById(id);
-    const btn = el.nextElementSibling;
-    const full = JSON.parse(fullJson);
-    if (btn.textContent === 'more') {
-        el.textContent = full;
-        btn.textContent = 'less';
-    } else {
-        el.textContent = full.substring(0, 200) + '…';
-        btn.textContent = 'more';
-    }
-}
-
 function renderDetail(data) {
     const panel = document.getElementById('detail-panel');
     const anchor = data.wal_start_index;
     const hasCheckpoint = data.checkpoint_content && data.checkpoint_content.length > 0;
     const shortModel = data.model.replace('claude-', '').replace(/-\d{8}$/, '');
 
-    // Messages
+    // Messages — each is a readable block with ~5 lines + expander
     let msgsHtml = '';
     if (data.messages && data.messages.length > 0) {
         msgsHtml = data.messages.map((m, i) => {
-            let zone = '';
-            if (anchor != null) {
-                zone = i < anchor ? 'msg-checkpointed' : 'msg-wal';
-            }
+            const isWal = anchor != null && i >= anchor;
+            const zone = anchor != null ? (isWal ? 'msg-wal' : '') : '';
             const roleClass = m.role === 'user' ? 'role-user' : m.role === 'assistant' ? 'role-assistant' : 'role-other';
-            const preview = buildMsgPreview(m.preview, `msg-${data.conv_id}-${i}`);
-            return `<div class="msg-row ${zone}">
-                <span class="msg-index">${i}</span>
-                <span class="msg-role ${roleClass}">${m.role}</span>
-                ${preview}
+            const walTag = isWal ? '<span class="msg-wal-tag">WAL</span>' : '';
+            const msgId = `msg-${data.conv_id}-${i}`;
+            const text = m.preview || '';
+            const lines = text.split('\n');
+            const needsExpand = lines.length > 5 || text.length > 400;
+            let contentHtml;
+            if (!needsExpand) {
+                contentHtml = `<div class="msg-content">${escapeHtml(text)}</div>`;
+            } else {
+                const preview = lines.slice(0, 5).join('\n');
+                contentHtml = `<div class="msg-content msg-collapsed" id="${msgId}">${escapeHtml(preview)}…</div>
+                    <button class="btn-msg-toggle" id="${msgId}-btn" onclick="toggleMsgBlock('${msgId}')">show more</button>`;
+            }
+            return `<div class="msg-block ${zone}">
+                <div class="msg-header">
+                    <span class="msg-index">#${i}</span>
+                    <span class="msg-role ${roleClass}">${m.role}</span>
+                    ${walTag}
+                </div>
+                ${contentHtml}
             </div>`;
         }).join('');
     } else {
         msgsHtml = '<div class="detail-empty">No messages captured yet</div>';
+    }
+
+    // Store full message data for expand/collapse
+    if (data.messages) {
+        window._msgData = window._msgData || {};
+        data.messages.forEach((m, i) => {
+            window._msgData[`msg-${data.conv_id}-${i}`] = m.preview || '';
+        });
     }
 
     // Checkpoint
@@ -188,37 +219,38 @@ function renderDetail(data) {
             </div>`;
     }
 
-    // Anchor
-    let anchorHtml = '';
-    if (anchor != null) {
-        anchorHtml = `<div class="detail-meta">
-            Checkpoint anchor: <strong>index ${anchor}</strong> |
-            Checkpointed: <strong>${anchor}</strong> msgs |
-            WAL: <strong>${data.messages.length - anchor}</strong> msgs
-        </div>`;
-    }
-
     panel.innerHTML = `
         <div class="detail-header">
             <h3>${data.conv_id} (${shortModel})</h3>
             <button class="btn-close" onclick="selectConv('${data.key}')">&times;</button>
         </div>
         <div class="detail-meta">
-            ${data.model} | ${data.phase} | ${(data.utilization * 100).toFixed(1)}% |
             ${data.total_input_tokens.toLocaleString()} / ${data.context_window.toLocaleString()} tokens
         </div>
-        ${anchorHtml}
+        ${buildLifecycle(data.phase, data.utilization)}
         ${checkpointHtml}
         <div class="detail-section">
             <h3>Messages (${data.messages.length})</h3>
-            <div class="msg-legend">
-                <span class="legend-chip legend-checkpointed">Checkpointed</span>
-                <span class="legend-chip legend-wal">WAL (post-checkpoint)</span>
-            </div>
             <div class="msg-list">${msgsHtml}</div>
         </div>
     `;
     panel.style.display = 'block';
+}
+
+function toggleMsgBlock(id) {
+    const el = document.getElementById(id);
+    const btn = document.getElementById(id + '-btn');
+    const full = (window._msgData && window._msgData[id]) || '';
+    if (btn.textContent === 'show more') {
+        el.textContent = full;
+        el.classList.remove('msg-collapsed');
+        btn.textContent = 'show less';
+    } else {
+        const lines = full.split('\n').slice(0, 5).join('\n');
+        el.textContent = lines + '…';
+        el.classList.add('msg-collapsed');
+        btn.textContent = 'show more';
+    }
 }
 
 function escapeHtml(text) {
