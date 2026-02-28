@@ -60,37 +60,42 @@ Or use `claude` directly if you added the alias.
 
 ## How the Double Buffer Works
 
-The proxy monitors context window utilization for each conversation. When the window starts filling up, it checkpoints the conversation and eventually swaps in a compressed summary, freeing space for the conversation to continue.
+The proxy pre-computes conversation checkpoints in the background. When Claude Code naturally asks to compact its context, the proxy intercepts the request and returns the pre-computed checkpoint instantly — saving an API call and ~30 seconds of latency.
 
 ```
 Context Window Utilization
 │
-│  0%─────────60%──────────80%─────────100%
-│  │           │            │            │
-│  │   IDLE    │  CHKPT     │   SWAP     │
-│  │           │  PENDING   │   READY    │
-│  │           │            │            │
-│  ▼           ▼            ▼            ▼
+│  0%─────────60%──────────────────80%───────100%
+│  │           │                    │          │
+│  │   IDLE    │  Proxy checkpoints │  Claude  │
+│  │           │  in background     │  auto-   │
+│  │           │                    │  compacts│
+│  ▼           ▼                    ▼          ▼
+│
+│  Proxy:     Background checkpoint at 60% (pre-compute summary)
+│  Claude:    Drives compaction at 80% (CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80)
+│  Intercept: Compact request → return pre-computed checkpoint instantly
 │
 │  Phase Transitions:
 │
 │  IDLE ──▶ CHECKPOINT_PENDING ──▶ CHECKPOINTING ──▶ WAL_ACTIVE
 │                                                        │
 │                                                        ▼
-│                                          SWAP_READY ──▶ SWAP_EXECUTING ──▶ IDLE
-│                                                                           (reset)
+│                   Claude sends compact ──▶ SWAP_READY ──▶ IDLE (reset)
+│                                            (proxy intercepts)
 ```
 
 | Phase | What happens |
 |-------|-------------|
 | **IDLE** | Normal operation. Proxy tracks token usage per request. |
-| **CHECKPOINT_PENDING** | Utilization crossed checkpoint threshold. Preparing summary. |
-| **CHECKPOINTING** | Calling the Anthropic compaction API to generate a conversation summary. |
+| **CHECKPOINT_PENDING** | Utilization crossed checkpoint threshold. Preparing background summary. |
+| **CHECKPOINTING** | Calling the Anthropic compaction API in the background to pre-compute a summary. |
 | **WAL_ACTIVE** | Checkpoint complete. New messages are recorded in a write-ahead log (WAL). |
-| **SWAP_READY** | Utilization crossed swap threshold. Next request triggers the swap. |
-| **SWAP_EXECUTING** | Swapping: old messages replaced with checkpoint summary + recent WAL. Context resets. |
+| **SWAP_READY** | Utilization crossed swap threshold. Pre-computed checkpoint ready to serve. |
 
-After the swap, Claude continues with full knowledge of the conversation via the compressed summary. The cycle repeats as the window fills again.
+**Client-driven compaction:** The proxy never initiates compaction itself — Claude Code drives the process. When Claude sends a compact request (detected by the prompt "create a detailed summary of the conversation"), the proxy either returns the pre-computed checkpoint (if available) or forwards the request to the API natively. Either way, Claude Code rebuilds its internal state correctly because it initiated the compaction.
+
+After the swap, Claude continues with full knowledge of the conversation via the compressed summary plus a WAL section containing recent messages. The cycle repeats as the window fills again.
 
 ## Dashboard
 
@@ -174,8 +179,8 @@ All settings via environment variables (prefix `DBPROXY_`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DBPROXY_CHECKPOINT_THRESHOLD` | `0.60` | Checkpoint at this % of context window |
-| `DBPROXY_SWAP_THRESHOLD` | `0.80` | Swap at this % of context window |
+| `DBPROXY_CHECKPOINT_THRESHOLD` | `0.60` | Pre-compute checkpoint at this % of context window |
+| `DBPROXY_SWAP_THRESHOLD` | `0.80` | Mark checkpoint ready to serve at this % |
 | `DBPROXY_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `DBPROXY_PASSTHROUGH` | `false` | Disable buffer logic (pure proxy mode) |
 | `DBPROXY_CONVERSATION_TTL_SECONDS` | `7200` | Inactive conversation cleanup (2 hours) |
@@ -251,7 +256,7 @@ git clone https://github.com/marklubin/double-buffer-proxy
 cd double-buffer-proxy
 uv sync --dev
 
-# Run tests (141 tests)
+# Run tests (151 tests)
 uv run pytest tests/ -x -v
 
 # Run proxy locally (without container)

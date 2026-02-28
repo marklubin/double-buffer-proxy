@@ -1,8 +1,13 @@
 """CI end-to-end lifecycle test.
 
 Sends real API calls through the proxy (via the CONNECT redirector),
-inflates context until checkpoint and swap trigger, then verifies
-Claude still works post-swap.
+inflates context until Claude Code would naturally trigger compaction,
+then verifies the conversation still works.
+
+The proxy pre-computes a checkpoint at 60% utilization. Claude Code
+(via CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80) triggers compaction at 80%.
+The proxy intercepts the compact request and returns the pre-computed
+checkpoint instantly.
 
 Usage:
     ANTHROPIC_API_KEY=sk-... python tests/ci_e2e.py
@@ -138,10 +143,9 @@ def main() -> int:
     log("Proxy healthy")
 
     messages: list[dict] = []
-    conv_id: str | None = None
-    seen_phases: set[str] = set()
-    swap_complete = False
+    checkpoint_seen = False
     start_time = time.time()
+    prev_input_tokens = 0
 
     for round_num in range(MAX_ROUNDS):
         elapsed = time.time() - start_time
@@ -172,6 +176,32 @@ def main() -> int:
             log(f"API error response: {response['error']}")
             return 1
 
+        # Check if this is a compaction response (Claude Code would have
+        # triggered compact, proxy intercepted with pre-computed checkpoint)
+        content = response.get("content", [])
+        has_compaction = any(
+            b.get("type") == "compaction" for b in content if isinstance(b, dict)
+        )
+
+        if has_compaction:
+            log("  COMPACTION RECEIVED — proxy returned pre-computed checkpoint")
+            compaction_text = ""
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "compaction":
+                    compaction_text = block.get("content", "")
+                    break
+
+            # Claude Code would rebuild state: replace old messages with
+            # compaction + recent. Simulate that here.
+            messages = [
+                {"role": "assistant", "content": [{"type": "compaction", "content": compaction_text}]},
+                {"role": "user", "content": "Continue. What were we discussing?"},
+            ]
+            checkpoint_seen = True
+            log(f"  Compaction length: {len(compaction_text)} chars")
+            log("  Message list rebuilt with compaction summary")
+            continue
+
         assistant_text = extract_text(response)
         messages.append({"role": "assistant", "content": assistant_text})
 
@@ -180,55 +210,20 @@ def main() -> int:
         output_tokens = usage.get("output_tokens", 0)
         log(f"  tokens: in={input_tokens} out={output_tokens} total_msgs={len(messages)}")
 
-        # Try to find our conversation in the proxy
-        if conv_id is None:
-            health = get_dashboard_state()
-            if health and health.get("conversations", 0) > 0:
-                # Query all conversations to find ours — use health endpoint
-                # The conv_id will show up in proxy logs; for now just check phases
-                log(f"  proxy tracking {health['conversations']} conversation(s)")
-
-        # Check conversation state if we know the conv_id
-        # We'll detect it from the proxy by checking for any conversation with our model
-        ctx_ssl = ssl.create_default_context()
-        ctx_ssl.check_hostname = False
-        ctx_ssl.verify_mode = ssl.CERT_NONE
-        try:
-            req = urllib.request.Request(f"https://localhost:{DASHBOARD_PORT}/health")
-            with urllib.request.urlopen(req, context=ctx_ssl, timeout=10) as resp:
-                pass
-        except Exception:
-            pass
-
-        # Monitor phase transitions via proxy logs approach:
-        # Check health for conversation count changes
+        # Monitor proxy state
         state = get_dashboard_state()
         if state:
             convs = state.get("conversations", 0)
             log(f"  active conversations: {convs}")
 
-        # After enough tokens, start checking for lifecycle events
+        # Track context growth
         if input_tokens > 40000:
-            log(f"  context at {input_tokens} tokens — watching for checkpoint/swap...")
+            log(f"  context at {input_tokens} tokens — checkpoint should be computing...")
 
-        # Check if the proxy has done a swap by looking at response behavior
-        # After a swap, the proxy resets context — if we keep sending the full
-        # message history but the proxy has swapped, it will still work because
-        # the proxy intercepts and rewrites the messages.
+        if input_tokens > 55000:
+            log(f"  context at {input_tokens} tokens — compaction expected soon...")
 
-        # Simple heuristic: if input_tokens suddenly drops, a swap happened
-        if round_num > 0 and input_tokens < usage.get("input_tokens", input_tokens):
-            log("  SWAP DETECTED (token count dropped)")
-            swap_complete = True
-
-        if swap_complete:
-            log("SUCCESS: Full lifecycle verified (swap detected)")
-            break
-
-        # Also check: if we've been going long enough, the proxy should have
-        # cycled through phases. Let's verify by sending a post-threshold request.
-        if input_tokens > 55000 and not swap_complete:
-            log("  Past checkpoint threshold — swap should trigger soon...")
+        prev_input_tokens = input_tokens
 
     # Final verification: send one more message to prove the conversation works
     messages.append({"role": "user", "content": "What have we discussed? List the topics briefly."})
@@ -237,7 +232,11 @@ def main() -> int:
         final_text = extract_text(final_response)
         if final_text:
             log(f"Post-test verification: {final_text[:200]}...")
-            log("SUCCESS: Conversation functional after full test")
+            if checkpoint_seen:
+                log("SUCCESS: Full lifecycle verified (compaction occurred and conversation continued)")
+            else:
+                log("WARNING: Conversation functional but no compaction was triggered")
+                log("  (This may be OK if context didn't reach the compaction threshold)")
             return 0
         else:
             log("WARNING: Empty response on final verification")

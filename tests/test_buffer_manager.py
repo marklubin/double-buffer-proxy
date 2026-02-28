@@ -30,15 +30,6 @@ class TestBufferManager:
         })
         assert mgr.total_input_tokens == 130_000
 
-    def test_should_swap_false_when_idle(self):
-        mgr = BufferManager("test", "claude-sonnet-4-6", 200_000)
-        assert not mgr.should_swap()
-
-    def test_should_swap_true_when_ready(self):
-        mgr = BufferManager("test", "claude-sonnet-4-6", 200_000)
-        mgr.phase = BufferPhase.SWAP_READY
-        assert mgr.should_swap()
-
     def test_to_dict(self):
         mgr = BufferManager("abcdef1234567890rest", "claude-sonnet-4-6", 200_000)
         mgr.total_input_tokens = 50_000
@@ -65,8 +56,8 @@ class TestBufferManager:
         mgr.checkpoint_content = "This is a summary of the conversation."
         result = await mgr.execute_swap(stream=False)
         assert isinstance(result, dict)
-        assert result["stop_reason"] == "compaction"
-        assert result["content"][0]["type"] == "compaction"
+        assert result["stop_reason"] == "end_turn"
+        assert result["content"][0]["type"] == "text"
         assert mgr.phase == BufferPhase.IDLE
 
     @pytest.mark.asyncio
@@ -167,7 +158,7 @@ class TestSwapWalStitching:
         mgr.checkpoint_anchor_index = 2  # checkpoint covered [0:2]
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert "Summary of early conversation." in content
         assert "<recent_activity>" in content
         assert "new msg after checkpoint" in content
@@ -186,7 +177,7 @@ class TestSwapWalStitching:
         mgr.checkpoint_anchor_index = 2  # checkpoint covered all messages
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert content == "Summary of early conversation."
         assert "<recent_activity>" not in content
 
@@ -200,7 +191,7 @@ class TestSwapWalStitching:
         mgr.checkpoint_anchor_index = None
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert content == "Summary of early conversation."
         assert "<recent_activity>" not in content
 
@@ -212,7 +203,7 @@ class TestSwapWalStitching:
         mgr.checkpoint_anchor_index = 5
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert content == "Summary of early conversation."
 
     @pytest.mark.asyncio
@@ -225,7 +216,7 @@ class TestSwapWalStitching:
         mgr.checkpoint_anchor_index = 10
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert "<recent_activity>" not in content
 
     @pytest.mark.asyncio
@@ -251,7 +242,7 @@ class TestSwapWalStitching:
         ]
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert "[tool_use: Read(" in content
         assert "[tool_result: def main():" in content
         assert "Let me read that file." in content
@@ -270,7 +261,7 @@ class TestSwapWalStitching:
         ]
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert "[prior compaction summary]" in content
         assert "continue working" in content
 
@@ -287,7 +278,7 @@ class TestSwapWalStitching:
         ]
 
         result = await mgr.execute_swap(stream=False)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         # The tool result text should be truncated
         assert len(content) < 1000
 

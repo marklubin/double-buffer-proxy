@@ -296,6 +296,7 @@ async def _passthrough_to_upstream(
 async def handle_passthrough(request: web.Request) -> web.Response:
     """Passthrough handler for non-/v1/messages API paths."""
     path = request.match_info.get("path", "")
+    log.info("v1_passthrough", method=request.method, path=f"/v1/{path}")
     return await _passthrough_to_upstream(request, f"/v1/{path}")
 
 

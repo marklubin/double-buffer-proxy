@@ -141,12 +141,18 @@ async def run_checkpoint(
     response.raise_for_status()
 
     result = response.json()
+    log.debug(
+        "checkpoint_raw_response",
+        stop_reason=result.get("stop_reason"),
+        content_types=[b.get("type") for b in result.get("content", [])],
+        usage=result.get("usage"),
+    )
 
     # Extract compaction content from response
     content_blocks = result.get("content", [])
     for block in content_blocks:
         if block.get("type") == "compaction":
-            compaction_text = block.get("content", "")
+            compaction_text = block.get("content") or ""
             log.info(
                 "checkpoint_completed",
                 compaction_length=len(compaction_text),

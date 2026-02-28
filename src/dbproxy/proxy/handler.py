@@ -14,15 +14,14 @@ import structlog
 from aiohttp import web
 
 from dbproxy.buffer.manager import BufferManager
-from dbproxy.buffer.state_machine import BufferPhase
 from dbproxy.buffer.swap import serialize_swap_response_bytes
 from dbproxy.config import ProxyConfig
 from dbproxy.identity.fingerprint import compute_fingerprint
 from dbproxy.identity.registry import ConversationRegistry
 from dbproxy.proxy.request_rewriter import (
     extract_request_metadata,
-    has_compact_edit,
     has_compaction_block,
+    is_compact_request,
     strip_compact_edit,
     strip_compaction_blocks,
 )
@@ -128,13 +127,31 @@ class MessageHandler:
         mgr.swap_threshold = self.config.swap_threshold
         mgr.compact_trigger_tokens = self.config.compact_trigger_tokens
 
+        # Log message structure for debugging compaction behavior
+        messages = metadata["messages"]
+        msg_summary = []
+        for msg in messages:
+            role = msg.get("role", "?")
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                msg_summary.append(f"{role}:text({len(content)})")
+            elif isinstance(content, list):
+                block_types = [
+                    b.get("type", "?") if isinstance(b, dict) else "str"
+                    for b in content
+                ]
+                msg_summary.append(f"{role}:[{','.join(block_types)}]")
+            else:
+                msg_summary.append(f"{role}:?")
+
         log.info(
             "request_received",
             conv_id=fingerprint[:16],
             model=model,
             stream=stream,
             phase=mgr.phase.value,
-            message_count=len(metadata["messages"]),
+            message_count=len(messages),
+            msg_structure=msg_summary,
         )
 
         # Detect suggestion-mode requests (ephemeral — skip buffer logic)
@@ -154,24 +171,17 @@ class MessageHandler:
         if self.config.passthrough:
             return await self._forward_request(request, body, body_bytes, mgr, stream)
 
-        # Check if we should execute a swap — either already SWAP_READY,
-        # or WAL_ACTIVE with utilization past swap threshold (don't waste
-        # a round-trip forwarding when we know we need to swap).
-        if mgr.should_swap():
-            return await self._execute_swap(mgr, stream)
-        if (mgr.phase == BufferPhase.WAL_ACTIVE
-                and mgr.checkpoint_content
-                and mgr.utilization >= mgr.swap_threshold):
+        # Check if this is a client-initiated compact request.
+        # Claude Code drives compaction — the proxy intercepts and returns
+        # a pre-computed checkpoint if available, saving an API call.
+        ctx_mgmt = body.get("context_management")
+        if ctx_mgmt:
             log.info(
-                "immediate_swap",
-                conv_id=mgr.conv_id[:16],
-                utilization=f"{mgr.utilization:.1%}",
+                "context_management_detected",
+                conv_id=fingerprint[:16],
+                edits=[e.get("type") for e in ctx_mgmt.get("edits", [])],
             )
-            mgr.phase = BufferPhase.SWAP_READY
-            return await self._execute_swap(mgr, stream)
-
-        # Check if this is a client-initiated compact
-        client_wants_compact = has_compact_edit(body)
+        client_wants_compact = is_compact_request(body)
         if client_wants_compact:
             synthetic = await mgr.handle_client_compact(
                 stream=stream,
@@ -180,9 +190,16 @@ class MessageHandler:
             )
             if synthetic is not None:
                 return self._send_synthetic_response(synthetic, mgr, stream)
-            # Otherwise, forward the native compact request
+            # No checkpoint available — forward native compact request AS-IS
+            # so the API processes the compaction normally.
+            result = await self._forward_request(
+                request, body, body_bytes, mgr, stream,
+            )
+            # Native compact resets Claude's context — reset our state too
+            await mgr.reset("native_compact_forwarded")
+            return result
 
-        # Strip compact edit and forward
+        # Strip compact edit from non-compact requests (safety) and forward
         rewritten_body = strip_compact_edit(body)
         return await self._forward_request(
             request, rewritten_body, json.dumps(rewritten_body).encode(), mgr, stream,
@@ -372,15 +389,6 @@ class MessageHandler:
                 "x-double-buffer-conv-id": mgr.conv_id[:16],
             },
         )
-
-    async def _execute_swap(
-        self,
-        mgr: BufferManager,
-        stream: bool,
-    ) -> web.StreamResponse:
-        """Execute a buffer swap, returning synthetic compaction to client."""
-        response = await mgr.execute_swap(stream)
-        return self._send_synthetic_response(response, mgr, stream)
 
     def _send_synthetic_response(
         self,

@@ -47,12 +47,50 @@ def strip_compact_edit(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def has_compact_edit(body: dict[str, Any]) -> bool:
-    """Check if the request contains a compact_20260112 edit."""
+    """Check if the request contains a compact_20260112 edit.
+
+    Deprecated: Claude Code never sends this edit type. Use
+    ``is_compact_request`` instead.
+    """
     ctx_mgmt = body.get("context_management")
     if not ctx_mgmt:
         return False
     edits = ctx_mgmt.get("edits", [])
     return any(e.get("type") == COMPACT_EDIT_TYPE for e in edits)
+
+
+# Marker text that Claude Code includes in compaction prompts.
+COMPACT_PROMPT_MARKER = "create a detailed summary of the conversation"
+
+
+def is_compact_request(body: dict[str, Any]) -> bool:
+    """Detect if this is a Claude Code compaction request.
+
+    Claude Code sends compaction as a regular /v1/messages request where
+    the last user message contains a prompt asking to summarize the
+    conversation.  There is no special edit type or content block —
+    it's just a regular message.
+    """
+    messages = body.get("messages", [])
+    if not messages:
+        return False
+    last = messages[-1]
+    if last.get("role") != "user":
+        return False
+    content = last.get("content", "")
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+            elif isinstance(block, str):
+                parts.append(block)
+        text = " ".join(parts)
+    else:
+        return False
+    return COMPACT_PROMPT_MARKER in text.lower()
 
 
 def has_compaction_block(body: dict[str, Any]) -> bool:

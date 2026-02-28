@@ -315,6 +315,7 @@ fi
 export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
 export NODE_EXTRA_CA_CERTS="$CA_CERT"
 export DBPROXY_ACTIVE=1
+export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
 
 # Only print status if stdout is a terminal
 if [ -t 1 ]; then

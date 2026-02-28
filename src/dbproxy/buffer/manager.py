@@ -94,7 +94,7 @@ class BufferManager:
         cache_read = usage.get("cache_read_input_tokens", 0)
         self.total_input_tokens = input_tokens + cache_creation + cache_read
 
-        log.debug(
+        log.info(
             "tokens_updated",
             conv_id=self.conv_id[:16],
             total=self.total_input_tokens,
@@ -315,10 +315,6 @@ class BufferManager:
             checkpoint_length=len(self.checkpoint_content or ""),
             anchor_index=self.checkpoint_anchor_index,
         )
-
-    def should_swap(self) -> bool:
-        """Check if we should execute a swap on the next request."""
-        return self.phase == BufferPhase.SWAP_READY
 
     async def execute_swap(self, stream: bool) -> dict[str, Any] | list:
         """Execute the buffer swap, returning the synthetic response."""

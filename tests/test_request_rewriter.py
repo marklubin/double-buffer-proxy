@@ -4,6 +4,7 @@ from dbproxy.proxy.request_rewriter import (
     extract_request_metadata,
     has_compact_edit,
     has_compaction_block,
+    is_compact_request,
     strip_compact_edit,
 )
 
@@ -66,6 +67,8 @@ class TestStripCompactEdit:
 
 
 class TestHasCompactEdit:
+    """Legacy detection — Claude Code never actually sends compact_20260112."""
+
     def test_true_when_present(self):
         body = _make_body(context_management={
             "edits": [{"type": "compact_20260112"}]
@@ -81,6 +84,71 @@ class TestHasCompactEdit:
             "edits": [{"type": "clear_thinking_20251015"}]
         })
         assert not has_compact_edit(body)
+
+
+class TestIsCompactRequest:
+    """Detects compact by checking last user message for summary prompt."""
+
+    COMPACT_PROMPT = (
+        "Your task is to create a detailed summary of the conversation so far, "
+        "paying close attention to the user's explicit requests and intentions."
+    )
+
+    def test_true_with_compact_prompt_string(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "user", "content": self.COMPACT_PROMPT},
+        ])
+        assert is_compact_request(body)
+
+    def test_true_with_compact_prompt_in_text_block(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "user", "content": [
+                {"type": "text", "text": self.COMPACT_PROMPT},
+            ]},
+        ])
+        assert is_compact_request(body)
+
+    def test_true_case_insensitive(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": "Create a Detailed Summary of the Conversation please"},
+        ])
+        assert is_compact_request(body)
+
+    def test_false_with_normal_message(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": "What is 2+2?"},
+        ])
+        assert not is_compact_request(body)
+
+    def test_false_when_no_messages(self):
+        body = _make_body(messages=[])
+        assert not is_compact_request(body)
+
+    def test_false_when_last_is_assistant(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": self.COMPACT_PROMPT},
+            {"role": "assistant", "content": "OK"},
+        ])
+        assert not is_compact_request(body)
+
+    def test_false_with_partial_match(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": "create a summary"},
+        ])
+        assert not is_compact_request(body)
+
+    def test_true_with_mixed_content_blocks(self):
+        body = _make_body(messages=[
+            {"role": "user", "content": [
+                {"type": "text", "text": "Some preamble. "},
+                {"type": "text", "text": self.COMPACT_PROMPT},
+            ]},
+        ])
+        assert is_compact_request(body)
 
 
 class TestHasCompactionBlock:

@@ -68,9 +68,20 @@ _SYSTEM = "You are helpful."
 _USER_MSG = {"role": "user", "content": "hello"}
 _ASST_MSG = {"role": "assistant", "content": [{"type": "text", "text": "hi"}]}
 
+# The prompt Claude Code sends when requesting compaction.
+_COMPACT_PROMPT = (
+    "Your task is to create a detailed summary of the conversation so far, "
+    "paying close attention to the user's explicit requests and intentions."
+)
+
 
 def _body(messages=None, compact=False):
-    """Build a /v1/messages request body with consistent fingerprint."""
+    """Build a /v1/messages request body with consistent fingerprint.
+
+    When compact=True, appends an assistant placeholder and the compact
+    prompt as the final user message (mimicking Claude Code's compact
+    flow).
+    """
     body = {
         "model": "claude-sonnet-4-6",
         "max_tokens": 8192,
@@ -79,14 +90,12 @@ def _body(messages=None, compact=False):
         "messages": messages or [_USER_MSG],
     }
     if compact:
-        body["context_management"] = {
-            "edits": [
-                {
-                    "type": "compact_20260112",
-                    "trigger": {"type": "input_tokens", "value": 100000},
-                }
-            ]
-        }
+        msgs = list(body["messages"])
+        # Maintain proper alternation: if last msg is user, add assistant reply
+        if msgs and msgs[-1].get("role") == "user":
+            msgs.append({"role": "assistant", "content": [{"type": "text", "text": "OK."}]})
+        msgs.append({"role": "user", "content": _COMPACT_PROMPT})
+        body["messages"] = msgs
     return body
 
 
@@ -139,14 +148,13 @@ def _get_mgr(client, body=None):
 # ---------------------------------------------------------------------------
 
 class TestFullLifecycle:
-    """Drive a conversation through the full checkpoint → swap lifecycle."""
+    """Drive a conversation through the full checkpoint → client compact lifecycle."""
 
     @respx.mock
-    async def test_idle_to_checkpoint_to_swap_to_idle(self, client):
-        """Full lifecycle: 5 rounds covering all phase transitions."""
+    async def test_idle_to_checkpoint_to_client_compact(self, client):
+        """Full lifecycle: checkpoint triggers in background, then client compact
+        request returns pre-computed checkpoint (proxy intercepts)."""
 
-        # Side effect dispatches checkpoint vs. normal requests by content.
-        # Token count is determined by message count (each round has a unique count).
         def side_effect(request: httpx.Request) -> Response:
             body = json.loads(request.content)
 
@@ -225,6 +233,7 @@ class TestFullLifecycle:
 
         # ---------------------------------------------------------------
         # Round 4: 7 messages, 170k tokens (85%) → SWAP_READY
+        # Normal request is forwarded (not intercepted)
         # ---------------------------------------------------------------
         resp = await client.post(
             "/v1/messages",
@@ -239,11 +248,14 @@ class TestFullLifecycle:
             headers=HEADERS,
         )
         assert resp.status == 200
+        data = await resp.json()
+        # Normal response — proxy does NOT intercept non-compact requests
+        assert data["stop_reason"] == "end_turn"
         assert mgr.phase == BufferPhase.SWAP_READY
 
         # ---------------------------------------------------------------
-        # Round 5: SWAP_READY → swap intercepts before forwarding.
-        # Returns synthetic compaction response.
+        # Round 5: Client sends compact request → proxy returns pre-computed
+        # checkpoint as synthetic text response.
         # ---------------------------------------------------------------
         resp = await client.post(
             "/v1/messages",
@@ -256,16 +268,16 @@ class TestFullLifecycle:
                 {"role": "user", "content": "even more"},
                 {"role": "assistant", "content": [{"type": "text", "text": "alright"}]},
                 {"role": "user", "content": "final"},
-            ]),
+            ], compact=True),
             headers=HEADERS,
         )
         assert resp.status == 200
         data = await resp.json()
 
-        # Swap response verification
-        assert data["stop_reason"] == "compaction"
-        assert data["content"][0]["type"] == "compaction"
-        compaction_content = data["content"][0]["content"]
+        # Synthetic summary response verification (regular text format)
+        assert data["stop_reason"] == "end_turn"
+        assert data["content"][0]["type"] == "text"
+        compaction_content = data["content"][0]["text"]
 
         # Compaction includes checkpoint summary
         assert "This is the checkpoint summary." in compaction_content
@@ -321,7 +333,8 @@ class TestEmergencySwap:
 
     @respx.mock
     async def test_emergency_skip_to_swap(self, client):
-        """Jumping past both thresholds runs blocking checkpoint → SWAP_READY."""
+        """Jumping past both thresholds runs blocking checkpoint → SWAP_READY.
+        Normal requests are forwarded; client compact triggers swap."""
 
         def side_effect(request: httpx.Request) -> Response:
             body = json.loads(request.content)
@@ -350,7 +363,7 @@ class TestEmergencySwap:
         assert mgr.phase == BufferPhase.SWAP_READY
         assert mgr.checkpoint_content == "emergency summary"
 
-        # Next request triggers swap
+        # Normal request should be forwarded (not intercepted)
         resp = await client.post(
             "/v1/messages",
             json=_body(),
@@ -358,8 +371,20 @@ class TestEmergencySwap:
         )
         assert resp.status == 200
         data = await resp.json()
-        assert data["stop_reason"] == "compaction"
-        assert "emergency summary" in data["content"][0]["content"]
+        assert data["stop_reason"] == "end_turn"
+        # Still SWAP_READY — normal requests don't trigger swap
+        assert mgr.phase == BufferPhase.SWAP_READY
+
+        # Client compact request triggers swap
+        resp = await client.post(
+            "/v1/messages",
+            json=_body(compact=True),
+            headers=HEADERS,
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["stop_reason"] == "end_turn"
+        assert "emergency summary" in data["content"][0]["text"]
         assert mgr.phase == BufferPhase.IDLE
 
 
@@ -370,7 +395,6 @@ class TestWALStitching:
     async def test_wal_includes_post_anchor_messages(self, client):
         """WAL section should contain messages after the checkpoint anchor."""
 
-        # We'll manually set up the state to test WAL stitching directly
         route = respx.post(path="/v1/messages").mock(
             return_value=Response(200, json=_api_response(input_tokens=5000)),
         )
@@ -397,17 +421,17 @@ class TestWALStitching:
         mgr.checkpoint_content = "Summary of first exchange."
         mgr.checkpoint_anchor_index = 2  # Messages [0:2] checkpointed
 
-        # Next request triggers swap — should include WAL from index 2 onward
+        # Client compact request triggers swap — includes WAL from index 2 onward
         resp = await client.post(
             "/v1/messages",
-            json=_body(messages=messages),
+            json=_body(messages=messages, compact=True),
             headers=HEADERS,
         )
         assert resp.status == 200
         data = await resp.json()
 
-        assert data["stop_reason"] == "compaction"
-        content = data["content"][0]["content"]
+        assert data["stop_reason"] == "end_turn"
+        content = data["content"][0]["text"]
 
         # Checkpoint summary present
         assert "Summary of first exchange." in content

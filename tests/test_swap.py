@@ -98,8 +98,9 @@ class TestBuildSwapResponse:
     def test_non_streaming(self):
         result = build_swap_response("summary", "claude-sonnet-4-6", stream=False)
         assert isinstance(result, dict)
-        assert result["stop_reason"] == "compaction"
-        assert result["content"][0]["content"] == "summary"
+        assert result["stop_reason"] == "end_turn"
+        assert result["content"][0]["text"] == "summary"
+        assert result["content"][0]["type"] == "text"
 
     def test_streaming(self):
         result = build_swap_response("summary", "claude-sonnet-4-6", stream=True)
@@ -110,7 +111,7 @@ class TestBuildSwapResponse:
         wal = [{"role": "user", "content": "recent msg"}]
         result = build_swap_response("summary", "claude-sonnet-4-6", stream=False, wal_messages=wal)
         assert isinstance(result, dict)
-        content = result["content"][0]["content"]
+        content = result["content"][0]["text"]
         assert "summary" in content
         assert "<recent_activity>" in content
         assert "recent msg" in content
@@ -119,7 +120,7 @@ class TestBuildSwapResponse:
         wal = [{"role": "user", "content": "recent msg"}]
         result = build_swap_response("summary", "claude-sonnet-4-6", stream=True, wal_messages=wal)
         assert isinstance(result, list)
-        # Check that the compaction content delta contains the WAL
+        # Check that the text delta contains the WAL
         sse_bytes = serialize_swap_response_bytes(result, stream=True)
         assert b"recent_activity" in sse_bytes
 
