@@ -1,6 +1,7 @@
 name = "synix-proxy-installer"
 main = "install-redirect.js"
 compatibility_date = "2024-01-01"
+account_id = "c5c6fa44c7add06c6c9728a9d207533d"
 
 routes = [
   { pattern = "synix.dev/proxy", zone_name = "synix.dev" }
