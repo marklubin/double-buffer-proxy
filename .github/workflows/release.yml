@@ -257,3 +257,9 @@ jobs:
             docker pull ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
             ```
           generate_release_notes: true
+
+      - name: Deploy install worker to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: worker
