@@ -378,17 +378,10 @@ configure_statusline() {
     STATUSLINE_SCRIPT="$DATA_DIR/statusline.sh"
     cat > "$STATUSLINE_SCRIPT" << 'SL_EOF'
 #!/bin/sh
-# Synix statusline — shows proxy is active and healthy.
+# Synix statusline — only visible when running through the proxy.
 # Claude Code pipes JSON on stdin (must be consumed).
 cat > /dev/null
-if [ -z "${SYNIX_ACTIVE:-}" ]; then exit 0; fi
-
-PORT="${SYNIX_DASHBOARD_PORT:-47201}"
-if curl -fsk --connect-timeout 1 --max-time 1 "https://localhost:${PORT}/health" >/dev/null 2>&1; then
-    printf '\033[1;38;5;48m⬡ synix\033[0m'
-else
-    printf '\033[1;38;5;48msynix\033[0m \033[31m○\033[0m'
-fi
+[ -n "${SYNIX_ACTIVE:-}" ] && printf '\033[1;38;5;48m◈ SYNIX-PROXY ON\033[0m'
 SL_EOF
     chmod +x "$STATUSLINE_SCRIPT"
 
@@ -418,8 +411,8 @@ with open('$CLAUDE_SETTINGS', 'w') as f:
             ok "Status line configured in $CLAUDE_SETTINGS"
         else
             warn "statusLine already configured in $CLAUDE_SETTINGS."
-            printf '  To add SYNIX_ON manually, append to your statusLine command:\n'
-            printf '  ; [ -n "\$SYNIX_ACTIVE" ] && printf " | SYNIX_ON"\n\n'
+            printf '  To add synix-proxy status manually, append to your statusLine command:\n'
+            printf '  ; [ -n "\$SYNIX_ACTIVE" ] && printf " | ◈ SYNIX-PROXY ON"\n\n'
         fi
     else
         # Create settings.json
