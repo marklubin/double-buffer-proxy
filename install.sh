@@ -387,33 +387,42 @@ SL_EOF
 
     # Update settings.json
     if [ -f "$CLAUDE_SETTINGS" ]; then
-        # Check if statusLine already configured
-        if python3 -c "
+        python3 - "$CLAUDE_SETTINGS" "$STATUSLINE_SCRIPT" << 'PYEOF'
 import json, sys
-with open('$CLAUDE_SETTINGS') as f:
+
+SETTINGS = sys.argv[1]
+SCRIPT = sys.argv[2]
+# Shell snippet appended to existing statusLine command
+SQ = "'"
+SNIPPET = (
+    "; [ -n " + '"${SYNIX_ACTIVE:-}"' + " ] && printf "
+    + SQ + " | \\033[1;38;5;48m◈ SYNIX\\033[0m" + SQ
+)
+
+with open(SETTINGS) as f:
     d = json.load(f)
-if 'statusLine' in d:
-    sys.exit(1)
-" 2>/dev/null; then
-            # No statusLine yet — add it
-            python3 -c "
-import json
-with open('$CLAUDE_SETTINGS') as f:
-    d = json.load(f)
-d['statusLine'] = {
-    'type': 'command',
-    'command': '$STATUSLINE_SCRIPT'
-}
-with open('$CLAUDE_SETTINGS', 'w') as f:
+
+sl = d.get("statusLine")
+
+if sl and sl.get("type") == "command":
+    cmd = sl.get("command", "")
+    if "SYNIX" in cmd:
+        print("Synix status already in statusLine.")
+        sys.exit(0)
+    sl["command"] = cmd + SNIPPET
+    d["statusLine"] = sl
+elif not sl:
+    d["statusLine"] = {"type": "command", "command": SCRIPT}
+else:
+    print("statusLine has unsupported type — skipping.")
+    sys.exit(0)
+
+with open(SETTINGS, "w") as f:
     json.dump(d, f, indent=2)
-    f.write('\n')
-"
-            ok "Status line configured in $CLAUDE_SETTINGS"
-        else
-            warn "statusLine already configured in $CLAUDE_SETTINGS."
-            printf '  To add synix-proxy status manually, append to your statusLine command:\n'
-            printf '  ; [ -n "\$SYNIX_ACTIVE" ] && printf " | ◈ SYNIX-PROXY ON"\n\n'
-        fi
+    f.write("\n")
+print("Status line updated.")
+PYEOF
+        ok "Status line configured in $CLAUDE_SETTINGS"
     else
         # Create settings.json
         cat > "$CLAUDE_SETTINGS" << SETTINGS_EOF
