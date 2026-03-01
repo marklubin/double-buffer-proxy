@@ -9,7 +9,7 @@
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
+curl -fsSL https://synix.dev/proxy | sh
 ```
 
 ```sh

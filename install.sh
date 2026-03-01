@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Synix Claude Proxy — Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
+# Usage: curl -fsSL https://synix.dev/proxy | sh
 #
 # Installs the Synix context window proxy for Claude Code.
 # Supports Docker and Podman. Installs to ~/.local/ (XDG-compliant).
@@ -223,7 +223,7 @@ case "${1:-}" in
         $RT rmi "ghcr.io/marklubin/synix-proxy:latest" 2>/dev/null || true
         $RT rmi "synix-proxy:latest" 2>/dev/null || true
         echo "Re-running installer (pulls latest image + updates wrapper)..."
-        curl -fsSL https://raw.githubusercontent.com/marklubin/double-buffer-proxy/main/install.sh | sh
+        curl -fsSL https://synix.dev/proxy | sh
         exit $?
         ;;
     uninstall)

@@ -249,7 +249,7 @@ jobs:
 
             ### Install
             ```sh
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | sh
+            curl -fsSL https://synix.dev/proxy | sh
             ```
 
             ### Container Image
