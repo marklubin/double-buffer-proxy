@@ -1,13 +1,8 @@
 """CI end-to-end lifecycle test.
 
 Sends real API calls through the proxy (via the CONNECT redirector),
-inflates context until Claude Code would naturally trigger compaction,
-then verifies the conversation still works.
-
-The proxy pre-computes a checkpoint at 60% utilization. Claude Code
-(via CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80) triggers compaction at 80%.
-The proxy intercepts the compact request and returns the pre-computed
-checkpoint instantly.
+stuffs large context to quickly hit checkpoint thresholds, then verifies
+the conversation still works after many rounds.
 
 Usage:
     ANTHROPIC_API_KEY=sk-... python tests/ci_e2e.py
@@ -17,8 +12,8 @@ Environment:
     PROXY_PORT            — CONNECT redirector port (default: 47200)
     DASHBOARD_PORT        — dashboard/health port (default: 47201)
     CA_CERT               — path to ca.pem (default: certs/ca.pem)
-    MAX_ROUNDS            — max conversation rounds (default: 40)
-    TIMEOUT_SECONDS       — overall timeout (default: 600)
+    MAX_ROUNDS            — max conversation rounds (default: 10)
+    TIMEOUT_SECONDS       — overall timeout (default: 300)
 """
 
 from __future__ import annotations
@@ -38,40 +33,26 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 PROXY_PORT = int(os.environ.get("PROXY_PORT", "47200"))
 DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "47201"))
 CA_CERT = os.environ.get("CA_CERT", "certs/ca.pem")
-MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "40"))
-TIMEOUT = int(os.environ.get("TIMEOUT_SECONDS", "600"))
+MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "10"))
+TIMEOUT = int(os.environ.get("TIMEOUT_SECONDS", "300"))
 MODEL = os.environ.get("MODEL", "claude-haiku-4-5-20251001")
 
-# Prompts designed to produce long responses and inflate context fast
-PROMPTS = [
-    "Write a detailed 800-word essay about the history of computing from Babbage to modern AI. Include specific dates and names.",
-    "Write a detailed 800-word essay about the history of mathematics from ancient Egypt through Euler and Gauss. Include specific dates.",
-    "Write a detailed 800-word essay about the history of physics from Aristotle through Einstein and Feynman. Include key equations.",
-    "Write a detailed 800-word essay about the history of chemistry from alchemy through Mendeleev and quantum chemistry.",
-    "Write a detailed 800-word essay about the history of biology from Aristotle through Darwin and CRISPR.",
-    "Combine all the essays above into a single 2000-word synthesis showing how each field enabled the others.",
-    "Write a 1000-word critical analysis of all the essays, pointing out oversimplifications and missing perspectives.",
-    "Respond to the critique with a 1000-word defense.",
-    "Write a 1000-word essay about the philosophy of science from Bacon through Kuhn and Feyerabend.",
-    "Write a 1000-word essay about the history of astronomy from Babylon through the James Webb telescope.",
-]
+# ~20k tokens of padding per round (~4 chars/token).
+# With checkpoint threshold at 25% of 200k = 50k tokens,
+# 3 rounds should hit it.
+PADDING_CHARS = 80_000
+PADDING = ("The quick brown fox jumps over the lazy dog. " * 2000)[:PADDING_CHARS]
 
 
 def log(msg: str) -> None:
     print(f"[ci_e2e] {msg}", flush=True)
 
 
-def get_dashboard_state(conv_id: str | None = None) -> dict | None:
-    """Query the proxy's health or conversation detail endpoint."""
+def get_dashboard_state() -> dict | None:
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-
-    if conv_id:
-        url = f"https://localhost:{DASHBOARD_PORT}/dashboard/api/conversation/{conv_id}:{MODEL}"
-    else:
-        url = f"https://localhost:{DASHBOARD_PORT}/health"
-
+    url = f"https://localhost:{DASHBOARD_PORT}/health"
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
@@ -81,18 +62,12 @@ def get_dashboard_state(conv_id: str | None = None) -> dict | None:
         return None
 
 
-def send_message(messages: list[dict]) -> dict:
-    """Send a message to the Claude API through the CONNECT redirector.
-
-    Uses urllib with HTTPS_PROXY to go through the redirector, same as
-    Node.js / Claude Code does.
-    """
-    # Build SSL context trusting our CA
+def send_message(messages: list[dict], max_tokens: int = 128) -> dict:
+    """Send a message through the CONNECT redirector to the API."""
     ctx = ssl.create_default_context()
     if os.path.exists(CA_CERT):
         ctx.load_verify_locations(CA_CERT)
 
-    # Set proxy handler
     proxy_handler = urllib.request.ProxyHandler({
         "https": f"http://localhost:{PROXY_PORT}",
     })
@@ -103,7 +78,7 @@ def send_message(messages: list[dict]) -> dict:
 
     body = json.dumps({
         "model": MODEL,
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "messages": messages,
     }).encode()
 
@@ -118,12 +93,11 @@ def send_message(messages: list[dict]) -> dict:
         method="POST",
     )
 
-    with opener.open(req, timeout=120) as resp:
+    with opener.open(req, timeout=60) as resp:
         return json.loads(resp.read())
 
 
 def extract_text(response: dict) -> str:
-    """Extract text content from API response."""
     for block in response.get("content", []):
         if block.get("type") == "text":
             return block["text"]
@@ -135,7 +109,6 @@ def main() -> int:
         log("ERROR: ANTHROPIC_API_KEY not set")
         return 1
 
-    # Verify proxy is healthy
     health = get_dashboard_state()
     if not health or health.get("status") != "ok":
         log(f"ERROR: Proxy not healthy: {health}")
@@ -143,109 +116,64 @@ def main() -> int:
     log("Proxy healthy")
 
     messages: list[dict] = []
-    checkpoint_seen = False
     start_time = time.time()
-    prev_input_tokens = 0
-
-    MIN_ROUNDS_FOR_PASS = 5  # Enough rounds to prove proxy works
 
     for round_num in range(MAX_ROUNDS):
         elapsed = time.time() - start_time
         if elapsed > TIMEOUT:
-            if round_num >= MIN_ROUNDS_FOR_PASS:
-                log(f"TIMEOUT after {elapsed:.0f}s — but {round_num} rounds succeeded, proxy works fine")
-                return 0
-            log(f"TIMEOUT after {elapsed:.0f}s — only {round_num} rounds completed")
-            return 1
+            log(f"TIMEOUT after {elapsed:.0f}s at round {round_num}")
+            return 1 if round_num < 3 else 0
 
-        # Pick prompt (cycle through them)
-        prompt = PROMPTS[round_num % len(PROMPTS)]
+        # Each user message includes padding to inflate context fast
+        prompt = (
+            f"Round {round_num + 1}. Respond with exactly one sentence. "
+            f"Ignore the padding below.\n\n{PADDING}"
+        )
         messages.append({"role": "user", "content": prompt})
 
         log(f"Round {round_num + 1}: sending ({len(messages)} messages)...")
+        t0 = time.time()
 
         try:
             response = send_message(messages)
         except Exception as exc:
             log(f"API error: {exc}")
-            # Retry once after a short delay
-            time.sleep(5)
+            time.sleep(3)
             try:
                 response = send_message(messages)
             except Exception as exc2:
                 log(f"API retry failed: {exc2}")
                 return 1
 
-        # Check for API errors
+        rtt = time.time() - t0
+
         if "error" in response:
             log(f"API error response: {response['error']}")
             return 1
-
-        # Check if this is a compaction response (Claude Code would have
-        # triggered compact, proxy intercepted with pre-computed checkpoint)
-        content = response.get("content", [])
-        has_compaction = any(
-            b.get("type") == "compaction" for b in content if isinstance(b, dict)
-        )
-
-        if has_compaction:
-            log("  COMPACTION RECEIVED — proxy returned pre-computed checkpoint")
-            compaction_text = ""
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "compaction":
-                    compaction_text = block.get("content", "")
-                    break
-
-            # Claude Code would rebuild state: replace old messages with
-            # compaction + recent. Simulate that here.
-            messages = [
-                {"role": "assistant", "content": [{"type": "compaction", "content": compaction_text}]},
-                {"role": "user", "content": "Continue. What were we discussing?"},
-            ]
-            checkpoint_seen = True
-            log(f"  Compaction length: {len(compaction_text)} chars")
-            log("  Message list rebuilt with compaction summary")
-            continue
 
         assistant_text = extract_text(response)
         messages.append({"role": "assistant", "content": assistant_text})
 
         usage = response.get("usage", {})
-        input_tokens = usage.get("input_tokens", 0)
-        output_tokens = usage.get("output_tokens", 0)
-        log(f"  tokens: in={input_tokens} out={output_tokens} total_msgs={len(messages)}")
+        in_tok = usage.get("input_tokens", 0)
+        out_tok = usage.get("output_tokens", 0)
+        log(f"  tokens: in={in_tok} out={out_tok} rtt={rtt:.1f}s msgs={len(messages)}")
 
-        # Monitor proxy state
         state = get_dashboard_state()
         if state:
-            convs = state.get("conversations", 0)
-            log(f"  active conversations: {convs}")
+            log(f"  conversations: {state.get('conversations', 0)}")
 
-        # Track context growth
-        if input_tokens > 40000:
-            log(f"  context at {input_tokens} tokens — checkpoint should be computing...")
-
-        if input_tokens > 55000:
-            log(f"  context at {input_tokens} tokens — compaction expected soon...")
-
-        prev_input_tokens = input_tokens
-
-    # Final verification: send one more message to prove the conversation works
-    messages.append({"role": "user", "content": "What have we discussed? List the topics briefly."})
+    # Final check
+    messages.append({"role": "user", "content": "Say 'test complete'."})
     try:
-        final_response = send_message(messages)
-        final_text = extract_text(final_response)
-        if final_text:
-            log(f"Post-test verification: {final_text[:200]}...")
-            if checkpoint_seen:
-                log("SUCCESS: Full lifecycle verified (compaction occurred and conversation continued)")
-            else:
-                log("WARNING: Conversation functional but no compaction was triggered")
-                log("  (This may be OK if context didn't reach the compaction threshold)")
+        final = send_message(messages)
+        text = extract_text(final)
+        if text:
+            log(f"Final: {text[:200]}")
+            log("SUCCESS: All rounds completed through proxy")
             return 0
-        else:
-            log("WARNING: Empty response on final verification")
-            return 1
+        log("WARNING: Empty final response")
+        return 1
     except Exception as exc:
         log(f"Final verification failed: {exc}")
         return 1

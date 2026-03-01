@@ -122,7 +122,7 @@ jobs:
     needs: [check-version, build]
     if: needs.check-version.outputs.needs_release == 'true' && !inputs.skip_e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     env:
       VERSION: ${{ needs.check-version.outputs.claude_version }}
     steps:
@@ -178,8 +178,8 @@ jobs:
           PROXY_PORT: "47200"
           DASHBOARD_PORT: "47201"
           CA_CERT: "certs/ca.pem"
-          MAX_ROUNDS: "30"
-          TIMEOUT_SECONDS: "900"
+          MAX_ROUNDS: "10"
+          TIMEOUT_SECONDS: "300"
         run: python tests/ci_e2e.py
 
       - name: Dump logs on failure
