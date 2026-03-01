@@ -304,19 +304,18 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
     $RT rm "$CONTAINER_NAME" 2>/dev/null || true
 
     echo "Starting Synix proxy..."
-    $RT run -d \
-        --name "$CONTAINER_NAME" \
-        -p "127.0.0.1:${PROXY_PORT}:47200" \
-        -p "127.0.0.1:${DASHBOARD_PORT}:443" \
-        -v "$DATA_DIR/certs:/app/certs" \
-        -v "$DATA_DIR/data:/app/data" \
-        -v "$DATA_DIR/logs:/app/logs" \
-        -e "SYNIX_HOST=0.0.0.0" \
-        -e "SYNIX_LOG_LEVEL=${LOG_LEVEL}" \
-        -e "SYNIX_CHECKPOINT_THRESHOLD=${SYNIX_CHECKPOINT_THRESHOLD:-}" \
-        -e "SYNIX_SWAP_THRESHOLD=${SYNIX_SWAP_THRESHOLD:-}" \
-        --restart unless-stopped \
-        "$IMAGE_REF" >/dev/null
+    _run_args="-d --name $CONTAINER_NAME"
+    _run_args="$_run_args -p 127.0.0.1:${PROXY_PORT}:47200"
+    _run_args="$_run_args -p 127.0.0.1:${DASHBOARD_PORT}:443"
+    _run_args="$_run_args -v $DATA_DIR/certs:/app/certs"
+    _run_args="$_run_args -v $DATA_DIR/data:/app/data"
+    _run_args="$_run_args -v $DATA_DIR/logs:/app/logs"
+    _run_args="$_run_args -e SYNIX_HOST=0.0.0.0"
+    _run_args="$_run_args -e SYNIX_LOG_LEVEL=${LOG_LEVEL}"
+    [ -n "${SYNIX_CHECKPOINT_THRESHOLD:-}" ] && _run_args="$_run_args -e SYNIX_CHECKPOINT_THRESHOLD=${SYNIX_CHECKPOINT_THRESHOLD}"
+    [ -n "${SYNIX_SWAP_THRESHOLD:-}" ] && _run_args="$_run_args -e SYNIX_SWAP_THRESHOLD=${SYNIX_SWAP_THRESHOLD}"
+    _run_args="$_run_args --restart unless-stopped"
+    $RT run $_run_args "$IMAGE_REF" >/dev/null
 
     # Wait for health
     printf "Waiting for proxy"
