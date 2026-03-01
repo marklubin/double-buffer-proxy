@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.svg" alt="synix-proxy" width="520"/>
+  <img src="docs/logo.svg?v=2" alt="synix-proxy" width="520"/>
 </p>
 
 <p align="center">
