@@ -29,13 +29,17 @@ A local proxy that sits between Claude Code and the Anthropic API on your machin
 
 **Runs entirely on your machine.** No third-party servers, no data leaves your network. The proxy runs in a local Docker/Podman container and only communicates with `api.anthropic.com` — the same endpoint Claude Code already talks to. Your API keys and conversation data never touch anything else.
 
-![Claude Code with SYNIX_ON status](docs/claude.png)
+![Claude Code with Synix proxy active](docs/claude.png)
+
+When Claude compacts, the proxy returns the pre-computed checkpoint instantly:
+
+![Conversation compacted through Synix](docs/compacted.png)
 
 ## Dashboard
 
-Real-time monitoring of all active conversations at `https://localhost:47201/dashboard`.
+Real-time monitoring of all active conversations at `https://localhost:47201/dashboard`. Shows lifecycle phase, utilization, message history with checkpoint/WAL boundaries, and expandable message content.
 
-![Dashboard showing conversation state and event log](docs/dash.png)
+![Dashboard showing conversations, lifecycle bar, and message detail](docs/dash.png)
 
 ## Commands
 
