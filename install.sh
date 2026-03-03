@@ -161,6 +161,7 @@ DATA_DIR="${SYNIX_DATA_DIR:-$HOME/.local/share/synix-proxy}"
 CONTAINER_NAME="synix-proxy"
 PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
 DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
+DASHBOARD_HOST="${SYNIX_DASHBOARD_HOST:-0.0.0.0}"
 LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
 # ── Detect container runtime ────────────────────────────────────────────
@@ -275,6 +276,7 @@ case "${1:-}" in
         echo "  SYNIX_LOG_LEVEL          Log level (default: INFO)"
         echo "  SYNIX_PROXY_PORT         Redirector port (default: 47200)"
         echo "  SYNIX_DASHBOARD_PORT     Dashboard port (default: 47201)"
+        echo "  SYNIX_DASHBOARD_HOST     Dashboard bind address (default: 0.0.0.0)"
         echo "  SYNIX_CHECKPOINT_THRESHOLD  Checkpoint at N% context (default: 70)"
         echo "  SYNIX_SWAP_THRESHOLD     Swap at N% context (default: 80)"
         echo ""
@@ -306,7 +308,7 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
     echo "Starting Synix proxy..."
     _run_args="-d --name $CONTAINER_NAME"
     _run_args="$_run_args -p 127.0.0.1:${PROXY_PORT}:47200"
-    _run_args="$_run_args -p 127.0.0.1:${DASHBOARD_PORT}:443"
+    _run_args="$_run_args -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:443"
     _run_args="$_run_args -v $DATA_DIR/certs:/app/certs"
     _run_args="$_run_args -v $DATA_DIR/data:/app/data"
     _run_args="$_run_args -v $DATA_DIR/logs:/app/logs"
@@ -319,36 +321,40 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
 
     # Wait for health
     printf "Waiting for proxy"
+    _started=false
     for _i in $(seq 1 30); do
-        if curl -fsk "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+        if curl -fsk --noproxy localhost "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
             printf " ready.\n"
+            _started=true
             break
         fi
         printf "."
         sleep 1
     done
+    if ! $_started; then
+        printf " FAILED.\n" >&2
+        printf '\033[1;31m⚠ Synix proxy failed to start.\033[0m\n' >&2
+        printf '  Check logs: %s logs %s\n' "$RT" "$CONTAINER_NAME" >&2
+    fi
 fi
 
-# ── Verify CA cert ─────────────────────────────────────────────────────
-CA_CERT="$DATA_DIR/certs/ca.pem"
-if [ ! -f "$CA_CERT" ]; then
-    echo "ERROR: CA certificate not found at $CA_CERT" >&2
-    echo "Check: $RT logs $CONTAINER_NAME" >&2
-    exit 1
+# ── Verify proxy is actually healthy ───────────────────────────────────
+_PROXY_OK=false
+if curl -fsk --noproxy localhost "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+    CA_CERT="$DATA_DIR/certs/ca.pem"
+    if [ -f "$CA_CERT" ]; then
+        _PROXY_OK=true
+    else
+        printf '\033[1;31m⚠ Synix CA certificate missing: %s\033[0m\n' "$CA_CERT" >&2
+        printf '  Check: %s logs %s\n' "$RT" "$CONTAINER_NAME" >&2
+    fi
+else
+    printf '\033[1;31m⚠ Synix proxy is NOT responding — launching Claude without proxy.\033[0m\n' >&2
+    printf '  Container status: %s\n' "$($RT ps -a --filter "name=$CONTAINER_NAME" --format '{{.Status}}' 2>/dev/null || echo 'unknown')" >&2
+    printf '  Check: %s logs %s\n' "$RT" "$CONTAINER_NAME" >&2
 fi
 
-# ── If 'start' subcommand, just report and exit ────────────────────────
-if [ "${_SUBCOMMAND:-}" = "start" ] || { [ "${1:-}" = "" ] && [ "$(basename "$0")" != "claude" ]; } && false; then
-    :
-fi
-
-# ── Launch Claude ──────────────────────────────────────────────────────
-export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
-export NODE_EXTRA_CA_CERTS="$CA_CERT"
-export SYNIX_ACTIVE=1
-export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
-
-# Rewrite --full-access → --dangerously-skip-permissions
+# ── Rewrite --full-access → --dangerously-skip-permissions ─────────────
 _args=()
 for _a in "$@"; do
     case "$_a" in
@@ -357,9 +363,19 @@ for _a in "$@"; do
     esac
 done
 
-# Only print status if stdout is a terminal
-if [ -t 1 ]; then
-    printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
+# ── Launch Claude ──────────────────────────────────────────────────────
+if $_PROXY_OK; then
+    export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
+    export NODE_EXTRA_CA_CERTS="$CA_CERT"
+    export SYNIX_ACTIVE=1
+    export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
+    if [ -t 1 ]; then
+        printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
+    fi
+else
+    if [ -t 1 ]; then
+        printf '\033[1;33mSynix: OFF\033[0m — Claude will use the Anthropic API directly.\n'
+    fi
 fi
 
 exec claude "${_args[@]}"
@@ -451,6 +467,7 @@ detect_shell_config() {
 smoke_test() {
     PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
     DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
+    DASHBOARD_HOST="${SYNIX_DASHBOARD_HOST:-0.0.0.0}"
     LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
     log "Starting proxy container..."
@@ -461,7 +478,7 @@ smoke_test() {
     $RT_CMD run -d \
         --name "$CONTAINER_NAME" \
         -p "127.0.0.1:${PROXY_PORT}:47200" \
-        -p "127.0.0.1:${DASHBOARD_PORT}:443" \
+        -p "${DASHBOARD_HOST}:${DASHBOARD_PORT}:443" \
         -v "$DATA_DIR/certs:/app/certs" \
         -v "$DATA_DIR/data:/app/data" \
         -v "$DATA_DIR/logs:/app/logs" \
@@ -535,6 +552,50 @@ print_next_steps() {
     printf '\n'
 }
 
+# ── Install systemd user service (Linux only) ───────────────────────────────
+install_systemd_service() {
+    if [ "$OS" != "linux" ]; then
+        return 0
+    fi
+    if ! command -v systemctl >/dev/null 2>&1; then
+        warn "systemctl not found — skipping systemd service."
+        return 0
+    fi
+
+    UNIT_DIR="$HOME/.config/systemd/user"
+    mkdir -p "$UNIT_DIR"
+
+    # Resolve absolute path to runtime binary (without sudo prefix)
+    RT_BIN="$(echo "$RT_CMD" | sed 's/^sudo //')"
+    RT_ABS="$(command -v "$RT_BIN")"
+
+    cat > "$UNIT_DIR/synix-proxy.service" << EOF
+[Unit]
+Description=Synix Claude Proxy
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${RT_ABS} start ${CONTAINER_NAME}
+ExecStop=${RT_ABS} stop -t 10 ${CONTAINER_NAME}
+ExecReload=${RT_ABS} restart ${CONTAINER_NAME}
+
+[Install]
+WantedBy=default.target
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable synix-proxy.service 2>/dev/null || true
+
+    # Enable lingering so user services run at boot (without login)
+    if command -v loginctl >/dev/null 2>&1; then
+        loginctl enable-linger "$(whoami)" 2>/dev/null || true
+    fi
+
+    ok "Installed systemd user service (synix-proxy.service)"
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 main() {
     banner
@@ -547,6 +608,7 @@ main() {
     install_wrapper
     configure_statusline
     smoke_test
+    install_systemd_service
     print_next_steps
 }
 

@@ -27,29 +27,35 @@ if ! $COMPOSE -f "$COMPOSE_DIR/docker-compose.yml" ps --status running 2>/dev/nu
     $COMPOSE -f "$COMPOSE_DIR/docker-compose.yml" up -d --build
 
     printf "Waiting for proxy to be healthy"
+    _started=false
     for _i in $(seq 1 30); do
-        if curl -fsk "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+        if curl -fsk --noproxy localhost "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
             printf " ready.\n"
+            _started=true
             break
         fi
         printf "."
         sleep 1
     done
+    if ! $_started; then
+        printf " FAILED.\n" >&2
+        printf '\033[1;31m⚠ Synix proxy failed to start.\033[0m\n' >&2
+        printf '  Check: %s -f %s/docker-compose.yml logs\n' "$COMPOSE" "$COMPOSE_DIR" >&2
+    fi
 fi
 
-# Verify CA cert
-if [ ! -f "$CA_CERT" ]; then
-    echo "ERROR: CA certificate not found at $CA_CERT" >&2
-    echo "Check: $COMPOSE -f $COMPOSE_DIR/docker-compose.yml logs" >&2
-    exit 1
+# Verify proxy is actually healthy
+_PROXY_OK=false
+if curl -fsk --noproxy localhost "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+    if [ -f "$CA_CERT" ]; then
+        _PROXY_OK=true
+    else
+        printf '\033[1;31m⚠ Synix CA certificate missing: %s\033[0m\n' "$CA_CERT" >&2
+    fi
+else
+    printf '\033[1;31m⚠ Synix proxy is NOT responding — launching Claude without proxy.\033[0m\n' >&2
+    printf '  Check: %s -f %s/docker-compose.yml logs\n' "$COMPOSE" "$COMPOSE_DIR" >&2
 fi
-
-# Launch Claude
-printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
-export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
-export NODE_EXTRA_CA_CERTS="$CA_CERT"
-export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
-export SYNIX_ACTIVE=1
 
 # Rewrite --full-access → --dangerously-skip-permissions
 _args=()
@@ -59,5 +65,20 @@ for _a in "$@"; do
         *) _args+=("$_a") ;;
     esac
 done
+
+# Launch Claude
+if $_PROXY_OK; then
+    export HTTPS_PROXY="http://127.0.0.1:${PROXY_PORT}"
+    export NODE_EXTRA_CA_CERTS="$CA_CERT"
+    export SYNIX_ACTIVE=1
+    export CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=80
+    if [ -t 1 ]; then
+        printf '\033[1;38;5;48mSynix: ON\033[0m | Dashboard: https://localhost:%s/dashboard\n' "$DASHBOARD_PORT"
+    fi
+else
+    if [ -t 1 ]; then
+        printf '\033[1;33mSynix: OFF\033[0m — Claude will use the Anthropic API directly.\n'
+    fi
+fi
 
 exec claude "${_args[@]}"
