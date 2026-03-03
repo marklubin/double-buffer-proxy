@@ -125,12 +125,30 @@ async def run_checkpoint(
     if query_string:
         url = f"{url}?{query_string}"
 
-    response = await http_client.post(
-        url,
-        json=request_body,
-        headers=headers,
-        timeout=120.0,
-    )
+    # Retry on transient connection errors (e.g. HTTP/2 GOAWAY mid-request).
+    # The upstream server periodically rotates connections after a stream
+    # count limit, which can kill in-flight requests with ConnectionTerminated.
+    max_retries = 2
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = await http_client.post(
+                url,
+                json=request_body,
+                headers=headers,
+                timeout=120.0,
+            )
+            break
+        except httpx.RemoteProtocolError as exc:
+            log.warning(
+                "checkpoint_connection_error",
+                attempt=attempt,
+                max_retries=max_retries,
+                error=str(exc),
+            )
+            if attempt == max_retries:
+                raise
+            # httpx will open a fresh connection on the next request
+            continue
     if response.status_code != 200:
         log.error(
             "checkpoint_api_error",
