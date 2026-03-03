@@ -41,6 +41,7 @@ class BufferManager:
 
         self.phase = BufferPhase.IDLE
         self.total_input_tokens: int = 0
+        self._max_tokens: int = 0  # from request body, subtracted from context_window
 
         # Checkpoint state
         self.checkpoint_content: str | None = None
@@ -64,11 +65,24 @@ class BufferManager:
         self._on_state_change: Any | None = None
 
     @property
+    def effective_context_window(self) -> int:
+        """Context window minus max_tokens (output budget).
+
+        Claude Code calculates utilization as input_tokens / (context_window -
+        max_tokens).  We must use the same denominator so our checkpoint
+        threshold (70%) fires before Claude Code's compact trigger (80%).
+        """
+        if self._max_tokens > 0:
+            return self.context_window - self._max_tokens
+        return self.context_window
+
+    @property
     def utilization(self) -> float:
         """Current context window utilization as a fraction."""
-        if self.context_window <= 0:
+        eff = self.effective_context_window
+        if eff <= 0:
             return 0.0
-        return self.total_input_tokens / self.context_window
+        return self.total_input_tokens / eff
 
     def set_state_change_callback(self, callback: Any) -> None:
         """Set a callback to be invoked on phase transitions."""
@@ -88,6 +102,9 @@ class BufferManager:
         self._system = body.get("system")
         self._tools = body.get("tools")
         self._all_messages = body.get("messages", [])
+        max_tokens = body.get("max_tokens")
+        if isinstance(max_tokens, int) and max_tokens > 0:
+            self._max_tokens = max_tokens
 
     def update_tokens(self, usage: dict[str, Any]) -> None:
         """Update token count from a response's usage block."""
@@ -101,6 +118,7 @@ class BufferManager:
             conv_id=self.conv_id[:16],
             total=self.total_input_tokens,
             utilization=f"{self.utilization:.1%}",
+            effective_window=self.effective_context_window,
             phase=self.phase.value,
         )
 
@@ -445,7 +463,7 @@ class BufferManager:
             "phase": self.phase.value,
             "utilization": round(self.utilization, 4),
             "total_input_tokens": self.total_input_tokens,
-            "context_window": self.context_window,
+            "context_window": self.effective_context_window,
             "checkpoint_ready": self.checkpoint_content is not None,
             "checkpoint_anchor_index": self.checkpoint_anchor_index,
             "message_count": len(self._all_messages),

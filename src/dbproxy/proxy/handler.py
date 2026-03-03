@@ -158,6 +158,7 @@ class MessageHandler:
             stream=stream,
             phase=mgr.phase.value,
             message_count=len(messages),
+            max_tokens=metadata.get("max_tokens"),
             msg_structure=msg_summary,
         )
 
