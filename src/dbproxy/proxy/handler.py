@@ -19,6 +19,7 @@ from dbproxy.config import ProxyConfig
 from dbproxy.identity.fingerprint import compute_fingerprint
 from dbproxy.identity.registry import ConversationRegistry
 from dbproxy.proxy.request_rewriter import (
+    COMPACT_PROMPT_MARKER,
     extract_request_metadata,
     has_compaction_block,
     is_compact_request,
@@ -191,12 +192,65 @@ class MessageHandler:
             )
         client_wants_compact = is_compact_request(body)
         if client_wants_compact:
-            # Strip the compact prompt from stored messages so it doesn't
-            # leak into the WAL section of the synthetic response.  If the
-            # compact prompt ends up in the summary, the next request will
-            # contain it and trigger another compact detection loop.
+            # Log the last user message structure for debugging compact detection
+            last_user = messages[-1] if messages else {}
+            last_content = last_user.get("content", "")
+            if isinstance(last_content, list):
+                block_info = []
+                for b in last_content:
+                    if isinstance(b, dict):
+                        bt = b.get("type", "?")
+                        if bt == "text":
+                            block_info.append(f"text({len(b.get('text', ''))})")
+                        elif bt == "tool_result":
+                            block_info.append(f"tool_result({len(str(b.get('content', '')))})")
+                        else:
+                            block_info.append(bt)
+                    else:
+                        block_info.append(f"str({len(str(b))})")
+                log.info(
+                    "compact_detected_last_msg",
+                    conv_id=fingerprint[:16],
+                    last_role=last_user.get("role"),
+                    blocks=block_info,
+                )
+            else:
+                log.info(
+                    "compact_detected_last_msg",
+                    conv_id=fingerprint[:16],
+                    last_role=last_user.get("role"),
+                    content_type="string",
+                    content_len=len(str(last_content)),
+                )
+            # Strip compact prompt TEXT blocks from the last user message,
+            # but preserve tool_result and other non-text blocks.  Claude Code
+            # appends the compact prompt to the existing last user message,
+            # so dropping the entire message loses real content (tool results).
             if mgr._all_messages and mgr._all_messages[-1].get("role") == "user":
-                mgr._all_messages = mgr._all_messages[:-1]
+                last_msg = mgr._all_messages[-1]
+                content = last_msg.get("content", "")
+                if isinstance(content, str):
+                    # Plain string compact prompt — drop the whole message
+                    if COMPACT_PROMPT_MARKER in content.lower():
+                        mgr._all_messages = mgr._all_messages[:-1]
+                elif isinstance(content, list):
+                    # Mixed content — strip only text blocks with the marker
+                    filtered = [
+                        block for block in content
+                        if not (
+                            isinstance(block, dict)
+                            and block.get("type") == "text"
+                            and COMPACT_PROMPT_MARKER in block.get("text", "").lower()
+                        )
+                        and not (
+                            isinstance(block, str)
+                            and COMPACT_PROMPT_MARKER in block.lower()
+                        )
+                    ]
+                    if not filtered:
+                        mgr._all_messages = mgr._all_messages[:-1]
+                    else:
+                        mgr._all_messages[-1] = {**last_msg, "content": filtered}
 
             synthetic = await mgr.handle_client_compact(
                 stream=stream,

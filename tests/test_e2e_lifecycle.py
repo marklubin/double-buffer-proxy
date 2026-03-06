@@ -445,3 +445,68 @@ class TestWALStitching:
         # State reset
         assert mgr.phase == BufferPhase.IDLE
         assert mgr.total_input_tokens == 0
+
+    @respx.mock
+    async def test_wal_preserves_tool_results_in_compact_message(self, client):
+        """When compact prompt is appended to a user message with tool_results,
+        the tool_results must survive into WAL — only the compact text block
+        should be stripped."""
+
+        respx.post(path="/v1/messages").mock(
+            return_value=Response(200, json=_api_response(input_tokens=5000)),
+        )
+
+        # Conversation with tool calls — last user message has tool_result
+        messages = [
+            _USER_MSG,
+            _ASST_MSG,
+            {"role": "user", "content": "read the file"},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "Let me read that."},
+                {"type": "tool_use", "id": "tool_1", "name": "Read",
+                 "input": {"file_path": "/tmp/test.py"}},
+            ]},
+            # Last user message: tool_result + compact prompt appended
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tool_1",
+                 "content": "def hello(): pass"},
+                {"type": "text", "text": _COMPACT_PROMPT},
+            ]},
+        ]
+
+        # Register the conversation
+        resp = await client.post(
+            "/v1/messages",
+            json=_body(messages=messages[:4]),
+            headers=HEADERS,
+        )
+        assert resp.status == 200
+
+        # Force SWAP_READY with checkpoint at anchor=2
+        mgr = _get_mgr(client)
+        assert mgr is not None
+        mgr.phase = BufferPhase.SWAP_READY
+        mgr.checkpoint_content = "Summary so far."
+        mgr.checkpoint_anchor_index = 2
+
+        # Send compact request with mixed-content last message
+        compact_body = _body(messages=messages)
+        compact_body["context_management"] = {
+            "edits": [{"type": "compact_20260112"}],
+        }
+        resp = await client.post(
+            "/v1/messages",
+            json=compact_body,
+            headers=HEADERS,
+        )
+        assert resp.status == 200
+        data = await resp.json()
+        content = data["content"][0]["text"]
+
+        # WAL must include the tool_result content
+        assert "def hello(): pass" in content
+        # WAL must NOT include the compact prompt
+        assert "create a detailed summary" not in content.lower()
+        # Checkpoint summary must be present
+        assert "Summary so far." in content
+        assert mgr.phase == BufferPhase.IDLE

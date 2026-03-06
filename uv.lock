@@ -1078,7 +1078,7 @@ wheels = [
 
 [[package]]
 name = "synix-claude-proxy"
-version = "2.1.63"
+version = "2.1.70.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
