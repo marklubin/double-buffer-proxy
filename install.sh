@@ -196,7 +196,7 @@ case "${1:-}" in
     status)
         if $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | grep -q "$CONTAINER_NAME"; then
             echo "Running"
-            curl -fsk "https://localhost:${DASHBOARD_PORT}/health" 2>/dev/null || echo "(health check failed)"
+            curl -fsk "https://127.0.0.1:${DASHBOARD_PORT}/health" 2>/dev/null || echo "(health check failed)"
         else
             echo "Stopped"
         fi
@@ -323,7 +323,7 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
     printf "Waiting for proxy"
     _started=false
     for _i in $(seq 1 30); do
-        if curl -fsk --noproxy localhost "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+        if curl -fsk --noproxy 127.0.0.1 "https://127.0.0.1:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
             printf " ready.\n"
             _started=true
             break
@@ -340,7 +340,7 @@ fi
 
 # ── Verify proxy is actually healthy ───────────────────────────────────
 _PROXY_OK=false
-if curl -fsk --noproxy localhost "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+if curl -fsk --noproxy 127.0.0.1 "https://127.0.0.1:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
     CA_CERT="$DATA_DIR/certs/ca.pem"
     if [ -f "$CA_CERT" ]; then
         _PROXY_OK=true
@@ -472,25 +472,31 @@ smoke_test() {
 
     log "Starting proxy container..."
 
-    # Clean up any existing container
-    $RT_CMD rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    if [ "${USING_QUADLET:-}" = "true" ]; then
+        # Quadlet: systemd manages the container lifecycle
+        systemctl --user restart synix-proxy.service 2>/dev/null || \
+            systemctl --user start synix-proxy.service
+    else
+        # Standalone: manage container directly
+        $RT_CMD rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-    $RT_CMD run -d \
-        --name "$CONTAINER_NAME" \
-        -p "127.0.0.1:${PROXY_PORT}:47200" \
-        -p "${DASHBOARD_HOST}:${DASHBOARD_PORT}:443" \
-        -v "$DATA_DIR/certs:/app/certs" \
-        -v "$DATA_DIR/data:/app/data" \
-        -v "$DATA_DIR/logs:/app/logs" \
-        -e "SYNIX_HOST=0.0.0.0" \
-        -e "SYNIX_LOG_LEVEL=${LOG_LEVEL}" \
-        --restart unless-stopped \
-        "$IMAGE_REF" >/dev/null
+        $RT_CMD run -d \
+            --name "$CONTAINER_NAME" \
+            -p "127.0.0.1:${PROXY_PORT}:47200" \
+            -p "${DASHBOARD_HOST}:${DASHBOARD_PORT}:443" \
+            -v "$DATA_DIR/certs:/app/certs" \
+            -v "$DATA_DIR/data:/app/data" \
+            -v "$DATA_DIR/logs:/app/logs" \
+            -e "SYNIX_HOST=0.0.0.0" \
+            -e "SYNIX_LOG_LEVEL=${LOG_LEVEL}" \
+            --restart unless-stopped \
+            "$IMAGE_REF" >/dev/null
+    fi
 
     printf "  Waiting for health check"
     HEALTHY=false
     for _i in $(seq 1 30); do
-        if curl -fsk "https://localhost:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
+        if curl -fsk "https://127.0.0.1:${DASHBOARD_PORT}/health" >/dev/null 2>&1; then
             HEALTHY=true
             break
         fi
@@ -505,7 +511,11 @@ smoke_test() {
     else
         printf "\n"
         warn "Proxy started but health check failed. Check logs:"
-        printf '  %s logs %s\n' "$RT_CMD" "$CONTAINER_NAME"
+        if [ "${USING_QUADLET:-}" = "true" ]; then
+            printf '  journalctl --user -u synix-proxy.service\n'
+        else
+            printf '  %s logs %s\n' "$RT_CMD" "$CONTAINER_NAME"
+        fi
     fi
 }
 
@@ -562,28 +572,105 @@ install_systemd_service() {
         return 0
     fi
 
+    # Clean up legacy service files
     UNIT_DIR="$HOME/.config/systemd/user"
-    mkdir -p "$UNIT_DIR"
+    for _legacy in "$UNIT_DIR/synix-proxy.service" "$UNIT_DIR/double-buffer-proxy.service"; do
+        if [ -f "$_legacy" ]; then
+            systemctl --user stop "$(basename "$_legacy")" 2>/dev/null || true
+            systemctl --user disable "$(basename "$_legacy")" 2>/dev/null || true
+            rm -f "$_legacy"
+            log "Removed legacy service: $_legacy"
+        fi
+    done
 
-    # Resolve absolute path to runtime binary (without sudo prefix)
-    RT_BIN="$(echo "$RT_CMD" | sed 's/^sudo //')"
-    RT_ABS="$(command -v "$RT_BIN")"
+    # Stop any existing standalone container so it doesn't conflict
+    $RT_CMD stop "$CONTAINER_NAME" 2>/dev/null || true
+    $RT_CMD rm "$CONTAINER_NAME" 2>/dev/null || true
 
-    cat > "$UNIT_DIR/synix-proxy.service" << EOF
+    if [ "$RUNTIME" = "podman" ]; then
+        # Podman Quadlet: drop a .container file and let systemd generate the service
+        QUADLET_DIR="$HOME/.config/containers/systemd"
+        mkdir -p "$QUADLET_DIR"
+
+        PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
+        DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
+        DASHBOARD_HOST="${SYNIX_DASHBOARD_HOST:-0.0.0.0}"
+        LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
+
+        cat > "$QUADLET_DIR/synix-proxy.container" << EOF
+[Unit]
+Description=Synix Claude Proxy
+After=network-online.target
+
+[Container]
+Image=${IMAGE_REGISTRY}/${IMAGE_NAME}:latest
+ContainerName=${CONTAINER_NAME}
+AutoUpdate=registry
+
+PublishPort=127.0.0.1:${PROXY_PORT}:47200
+PublishPort=${DASHBOARD_HOST}:${DASHBOARD_PORT}:443
+
+Volume=${DATA_DIR}/certs:/app/certs:rw
+Volume=${DATA_DIR}/data:/app/data:rw
+Volume=${DATA_DIR}/logs:/app/logs:rw
+
+Environment=SYNIX_HOST=0.0.0.0
+Environment=SYNIX_LOG_LEVEL=${LOG_LEVEL}
+
+[Service]
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=90
+
+[Install]
+WantedBy=default.target
+EOF
+
+        USING_QUADLET=true
+        ok "Installed Podman Quadlet: $QUADLET_DIR/synix-proxy.container"
+    else
+        # Docker: use a systemd service that runs the container directly
+        # (no Quadlet equivalent — we use docker run so the latest image is
+        # always picked up on restart/reboot)
+        mkdir -p "$UNIT_DIR"
+
+        RT_BIN="$(echo "$RT_CMD" | sed 's/^sudo //')"
+        RT_ABS="$(command -v "$RT_BIN")"
+
+        PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
+        DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
+        DASHBOARD_HOST="${SYNIX_DASHBOARD_HOST:-0.0.0.0}"
+        LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
+
+        cat > "$UNIT_DIR/synix-proxy.service" << EOF
 [Unit]
 Description=Synix Claude Proxy
 After=network-online.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=${RT_ABS} start ${CONTAINER_NAME}
+Type=simple
+ExecStartPre=-${RT_ABS} rm -f ${CONTAINER_NAME}
+ExecStart=${RT_ABS} run --name ${CONTAINER_NAME} \
+    -p 127.0.0.1:${PROXY_PORT}:47200 \
+    -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:443 \
+    -v ${DATA_DIR}/certs:/app/certs \
+    -v ${DATA_DIR}/data:/app/data \
+    -v ${DATA_DIR}/logs:/app/logs \
+    -e SYNIX_HOST=0.0.0.0 \
+    -e SYNIX_LOG_LEVEL=${LOG_LEVEL} \
+    ${IMAGE_REGISTRY}/${IMAGE_NAME}:latest
 ExecStop=${RT_ABS} stop -t 10 ${CONTAINER_NAME}
-ExecReload=${RT_ABS} restart ${CONTAINER_NAME}
+ExecStopPost=-${RT_ABS} rm -f ${CONTAINER_NAME}
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=90
 
 [Install]
 WantedBy=default.target
 EOF
+
+        ok "Installed systemd service: $UNIT_DIR/synix-proxy.service"
+    fi
 
     systemctl --user daemon-reload
     systemctl --user enable synix-proxy.service 2>/dev/null || true
@@ -593,7 +680,7 @@ EOF
         loginctl enable-linger "$(whoami)" 2>/dev/null || true
     fi
 
-    ok "Installed systemd user service (synix-proxy.service)"
+    ok "Enabled synix-proxy.service (starts at boot)"
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -607,8 +694,8 @@ main() {
     generate_certs
     install_wrapper
     configure_statusline
-    smoke_test
     install_systemd_service
+    smoke_test
     print_next_steps
 }
 

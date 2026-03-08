@@ -1,0 +1,26 @@
+[Unit]
+Description=Synix Claude Proxy
+After=network-online.target
+
+[Container]
+Image=ghcr.io/marklubin/synix-proxy:latest
+ContainerName=synix-proxy
+AutoUpdate=registry
+
+PublishPort=127.0.0.1:47200:47200
+PublishPort=0.0.0.0:47201:443
+
+Volume=/home/mark/.local/share/synix-proxy/certs:/app/certs:rw
+Volume=/home/mark/.local/share/synix-proxy/data:/app/data:rw
+Volume=/home/mark/.local/share/synix-proxy/logs:/app/logs:rw
+
+Environment=SYNIX_HOST=0.0.0.0
+Environment=SYNIX_LOG_LEVEL=INFO
+
+[Service]
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=90
+
+[Install]
+WantedBy=default.target
