@@ -7,8 +7,7 @@ Image=ghcr.io/marklubin/synix-proxy:latest
 ContainerName=synix-proxy
 AutoUpdate=registry
 
-PublishPort=127.0.0.1:47200:47200
-PublishPort=0.0.0.0:47201:443
+Network=host
 
 Volume=%h/.local/share/synix-proxy/certs:/app/certs:rw
 Volume=%h/.local/share/synix-proxy/data:/app/data:rw

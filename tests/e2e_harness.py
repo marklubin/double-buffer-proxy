@@ -8,8 +8,8 @@ Usage (from inside the VM):
     cd ~/double-buffer-proxy && uv run python tests/e2e_harness.py
 
 Prerequisites:
-    - Proxy running on port 443:
-        sudo -E SYNIX_HOST=0.0.0.0 ~/.local/bin/uv run -m dbproxy --log-level DEBUG
+    - Proxy running on port 47201:
+        SYNIX_HOST=0.0.0.0 uv run -m dbproxy --log-level DEBUG
     - Claude Code running in tmux session 'ct'
     - /etc/hosts: 127.0.0.1 api.anthropic.com
     - NODE_EXTRA_CA_CERTS set in the tmux session
@@ -43,7 +43,7 @@ import urllib.request
 # ---------------------------------------------------------------------------
 
 PROXY_HOST = os.environ.get("E2E_PROXY_HOST", "127.0.0.1")
-PROXY_PORT = int(os.environ.get("E2E_PROXY_PORT", "443"))
+PROXY_PORT = int(os.environ.get("E2E_PROXY_PORT", "47201"))
 TMUX_SESSION = os.environ.get("E2E_TMUX_SESSION", "ct")
 MAX_ROUNDS = int(os.environ.get("E2E_MAX_ROUNDS", "60"))
 

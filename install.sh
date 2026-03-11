@@ -307,8 +307,15 @@ if ! $RT ps --filter "name=$CONTAINER_NAME" --format '{{.Names}}' 2>/dev/null | 
 
     echo "Starting Synix proxy..."
     _run_args="-d --name $CONTAINER_NAME"
-    _run_args="$_run_args -p 127.0.0.1:${PROXY_PORT}:47200"
-    _run_args="$_run_args -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:443"
+    # Podman: use host networking to avoid pasta DNS issues
+    # Docker: use port mapping (symmetric — container port matches host port)
+    _rt_base="${RT##sudo }"
+    if [ "$_rt_base" = "podman" ]; then
+        _run_args="$_run_args --network=host"
+    else
+        _run_args="$_run_args -p 127.0.0.1:${PROXY_PORT}:47200"
+        _run_args="$_run_args -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:47201"
+    fi
     _run_args="$_run_args -v $DATA_DIR/certs:/app/certs"
     _run_args="$_run_args -v $DATA_DIR/data:/app/data"
     _run_args="$_run_args -v $DATA_DIR/logs:/app/logs"
@@ -480,10 +487,14 @@ smoke_test() {
         # Standalone: manage container directly
         $RT_CMD rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
-        $RT_CMD run -d \
-            --name "$CONTAINER_NAME" \
-            -p "127.0.0.1:${PROXY_PORT}:47200" \
-            -p "${DASHBOARD_HOST}:${DASHBOARD_PORT}:443" \
+        _smoke_args="-d --name $CONTAINER_NAME"
+        if [ "$RUNTIME" = "podman" ]; then
+            _smoke_args="$_smoke_args --network=host"
+        else
+            _smoke_args="$_smoke_args -p 127.0.0.1:${PROXY_PORT}:47200"
+            _smoke_args="$_smoke_args -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:47201"
+        fi
+        $RT_CMD run $_smoke_args \
             -v "$DATA_DIR/certs:/app/certs" \
             -v "$DATA_DIR/data:/app/data" \
             -v "$DATA_DIR/logs:/app/logs" \
@@ -592,9 +603,6 @@ install_systemd_service() {
         QUADLET_DIR="$HOME/.config/containers/systemd"
         mkdir -p "$QUADLET_DIR"
 
-        PROXY_PORT="${SYNIX_PROXY_PORT:-47200}"
-        DASHBOARD_PORT="${SYNIX_DASHBOARD_PORT:-47201}"
-        DASHBOARD_HOST="${SYNIX_DASHBOARD_HOST:-0.0.0.0}"
         LOG_LEVEL="${SYNIX_LOG_LEVEL:-INFO}"
 
         cat > "$QUADLET_DIR/synix-proxy.container" << EOF
@@ -607,8 +615,7 @@ Image=${IMAGE_REGISTRY}/${IMAGE_NAME}:latest
 ContainerName=${CONTAINER_NAME}
 AutoUpdate=registry
 
-PublishPort=127.0.0.1:${PROXY_PORT}:47200
-PublishPort=${DASHBOARD_HOST}:${DASHBOARD_PORT}:443
+Network=host
 
 Volume=${DATA_DIR}/certs:/app/certs:rw
 Volume=${DATA_DIR}/data:/app/data:rw
@@ -652,7 +659,7 @@ Type=simple
 ExecStartPre=-${RT_ABS} rm -f ${CONTAINER_NAME}
 ExecStart=${RT_ABS} run --name ${CONTAINER_NAME} \
     -p 127.0.0.1:${PROXY_PORT}:47200 \
-    -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:443 \
+    -p ${DASHBOARD_HOST}:${DASHBOARD_PORT}:47201 \
     -v ${DATA_DIR}/certs:/app/certs \
     -v ${DATA_DIR}/data:/app/data \
     -v ${DATA_DIR}/logs:/app/logs \

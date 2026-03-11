@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 
 class ProxyConfig(BaseSettings):
     host: str = "127.0.0.1"
-    port: int = 443
+    port: int = 47201
     upstream_url: str = "https://api.anthropic.com"
     checkpoint_threshold: float = 0.70
     swap_threshold: float = 0.80

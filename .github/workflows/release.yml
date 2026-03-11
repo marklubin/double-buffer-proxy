@@ -118,7 +118,7 @@ jobs:
       - name: Smoke test — health endpoint
         run: |
           docker run -d --name smoke \
-            -p 127.0.0.1:47200:47200 -p 127.0.0.1:47201:443 \
+            -p 127.0.0.1:47200:47200 -p 127.0.0.1:47201:47201 \
             synix-proxy:test
           for i in $(seq 1 30); do
             if curl -fsk https://localhost:47201/health 2>/dev/null; then
@@ -170,7 +170,7 @@ jobs:
           mkdir -p certs data logs
           docker run -d --name dbproxy \
             -p 127.0.0.1:47200:47200 \
-            -p 127.0.0.1:47201:443 \
+            -p 127.0.0.1:47201:47201 \
             -v $PWD/certs:/app/certs \
             -v $PWD/data:/app/data \
             -v $PWD/logs:/app/logs \

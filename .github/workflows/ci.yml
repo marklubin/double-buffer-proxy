@@ -41,7 +41,7 @@ jobs:
         run: |
           docker run -d --name synix-test \
             -p 127.0.0.1:47200:47200 \
-            -p 127.0.0.1:47201:443 \
+            -p 127.0.0.1:47201:47201 \
             synix-proxy:test
           echo "Waiting for health..."
           for i in $(seq 1 30); do

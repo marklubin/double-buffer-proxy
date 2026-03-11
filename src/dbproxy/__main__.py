@@ -12,7 +12,7 @@ from .logging_config import setup_logging
 def main() -> None:
     parser = argparse.ArgumentParser(description="Synix Claude Proxy")
     parser.add_argument("--host", default=None, help="Bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=None, help="Bind port (default: 443)")
+    parser.add_argument("--port", type=int, default=None, help="Bind port (default: 47201)")
     parser.add_argument("--passthrough", action="store_true", help="Passthrough mode (no buffer logic)")
     parser.add_argument("--log-level", default=None, help="Log level (default: DEBUG)")
     parser.add_argument("--setup-tls", action="store_true", help="Generate TLS certs and install CA, then exit")
